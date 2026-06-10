@@ -2,7 +2,7 @@ from datetime import datetime
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.response import Response
-from .models import Group,User,Budget
+from .models import Group,Budget
 from rest_framework.permissions import IsAuthenticated
 from django.db import transaction
 from rest_framework.views import APIView
@@ -45,8 +45,7 @@ class BudgetView(APIView):
             if amount <= 0:
                 return Response({"status":"failed","message":"'budget' amount must be greater than 0"},status=status.HTTP_400_BAD_REQUEST)
             
-            category = category.strip().lower()
-            category = category.replace(" ","").capitalize()
+            category = category.strip().replace(" ","").capitalize()
             with transaction.atomic():
                 Budget.objects.update_or_create(group=group,category=category,defaults={"monthly_budget":amount,"date":date})
                 return Response({"status":"success","message":"Budget created successfully..."},status=status.HTTP_200_OK)
@@ -112,13 +111,11 @@ class BudgetView(APIView):
                 return Response({"status":"failed","message":"You are not access this group becuase you are not the member of this group"},status=status.HTTP_401_UNAUTHORIZED)
             
             if category:
-                category = category.strip().lower()
-                category = category.replace(" ","").capitalize()    
+                category = category.strip().replace(" ","").capitalize()
                 
-                if Budget.objects.filter(group = budget.group, category=category).exists():
+                if Budget.objects.filter(group = budget.group, category=category).exclude(id=budget.id).exists():
                     return Response({"status":"failed","message":f"'{category}' category name is aready exists try another cateory name."},status=status.HTTP_400_BAD_REQUEST)
                 budget.category = category
-                budget.save()
 
             if amount:
                 amount = isValid_type(float,amount,"decimal or integer","budget")
@@ -126,14 +123,14 @@ class BudgetView(APIView):
                     return Response({"status":"failed","message":"'budget' amount must be greater than 0"},status=status.HTTP_400_BAD_REQUEST)
 
                 budget.monthly_budget = amount
-                budget.save()
 
             if date:
                 date = datetime.strptime(date,'%Y-%m-%d')
                 budget.date = date
+            
+            with transaction.atomic():
                 budget.save()
-
-            return Response({"status":"success","message":"Budget updated successfully..."},status=status.HTTP_200_OK)
+                return Response({"status":"success","message":"Budget updated successfully..."},status=status.HTTP_200_OK)
         
         except ValueError as e:
             if "time data" in str(e):

@@ -4,7 +4,6 @@ from rest_framework import status
 from rest_framework.response import Response
 from .models import User,Group
 from rest_framework.permissions import AllowAny,IsAuthenticated
-from django.db import transaction
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth.models import update_last_login
@@ -13,7 +12,7 @@ from .token import generate_token,generate_otp
 from .validation import isValid_email
 
 # register
-@api_view(['POST','GET'])
+@api_view(['POST'])
 @permission_classes([AllowAny])
 def userregister(request):
     try:
@@ -52,6 +51,8 @@ def userregister(request):
             },
             status=status.HTTP_208_ALREADY_REPORTED
             )
+        
+        email = email.lower()
 
         if User.objects.filter(email=email).exists():
             return Response({
@@ -68,18 +69,15 @@ def userregister(request):
         token = generate_token(user)   
 
         group_id = request.GET.get('group_id') 
-
+        message = f"User '{username}' registered successfully..."
         if group_id:
             group = Group.objects.get(id = group_id)
             group.members.add(user)
-            return Response({
-                "status":"success",
-                "message":f"You are successfully joined in {group.name}"
-            })
+            message += f"\nYou are successfully joined in {group.name}"
 
         return Response({
             "status":"success",
-            "message":f"User '{username}' registered successfully...",
+            "message":message,
             "refresh":str(token),
             "access":str(token.access_token)
         },
@@ -104,7 +102,7 @@ def userregister(request):
 
 
 # login
-@api_view(['POST','GET'])
+@api_view(['POST'])
 @permission_classes([AllowAny])
 def userlogin(request):
     try:
@@ -131,6 +129,7 @@ def userlogin(request):
             },
             status=status.HTTP_401_UNAUTHORIZED
             )
+        
         update_last_login(None, user)
         token = generate_token(user)
         return Response({
@@ -160,8 +159,11 @@ def forgot_password(request):
             return Response({
                 "status":"failed",
                 "message":"'email' must be required"
-            })
+            },
+            status=status.HTTP_400_BAD_REQUEST
+            )
         
+        email = email.lower()
         user = User.objects.get(email=email)
 
         user = generate_otp(user)
@@ -220,7 +222,7 @@ def reset_password(request):
             },
             status=status.HTTP_400_BAD_REQUEST
             )
-        
+        email = email.lower()
         user = User.objects.get(email=email)
 
         if str(otp) != user.otp:
@@ -240,6 +242,7 @@ def reset_password(request):
             )
         
         user.password = make_password(new_password)
+        user.otp = None
         user.save()
 
         return Response({
@@ -264,8 +267,6 @@ def reset_password(request):
         },
         status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
-
-
 
 
 # logout

@@ -59,9 +59,9 @@ def send_invitation_link(request):
     except Group.DoesNotExist:
         return Response({
             "status":"failed",
-            "message":"No such group exist."
+            "message":"Group not found."
         },
-        status=status.HTTP_400_BAD_REQUEST
+        status=status.HTTP_404_NOT_FOUND
         )
         
     except Exception as e:
@@ -93,7 +93,7 @@ def join_group(request,group_id,email):
         group.members.add(user)
         return Response({
             "status":"success",
-            "message":f"Welcome! You are joined in '{group.name}' group. Now you are member of '{group.name}'"
+            "message":f"Welcome! You are joined in '{group.name}' group. Now you are the member of '{group.name}'"
         },
         status=status.HTTP_202_ACCEPTED
         )
@@ -104,15 +104,15 @@ def join_group(request,group_id,email):
             "status":"success",
             "message":f"May be you don't register yet. Please register via below link.\nregister_link:{link}"
         },
-        status=status.HTTP_202_ACCEPTED
+        status=status.HTTP_200_OK
         )
         
     except Group.DoesNotExist:
         return Response({
             "status":"failed",
-            "message":"No such group exist."
+            "message":"Group not found"
         },
-        status=status.HTTP_400_BAD_REQUEST
+        status=status.HTTP_404_NOT_FOUND
         )
     
     except Exception as e:

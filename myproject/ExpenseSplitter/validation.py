@@ -14,3 +14,4 @@ def isValid_type(type,value,type_field,value_field):
         return type(value)
     except:
         raise ValueError(f"'{value_field}' must be in {type_field}")
+    

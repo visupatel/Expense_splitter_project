@@ -27,8 +27,6 @@ def getuser(request):
         },
         status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
-    
-
 
 class GroupView(APIView):
     permission_classes = [IsAuthenticated]
@@ -49,7 +47,7 @@ class GroupView(APIView):
                 new_group.members.add(request.user)
                 return Response({
                     "status":"success",
-                    "message":f"'{group_name}' created successfully...."
+                    "message":f"'{group_name}' group created successfully...."
                 },
                 status=status.HTTP_201_CREATED
                 )
@@ -109,6 +107,7 @@ class GroupView(APIView):
             group_name = request.data.get('group_name')
             if not group_id:
                 return Response({"status":"failed","message":"'group_id' must be required"},status=status.HTTP_400_BAD_REQUEST)
+            
             group_id = isValid_type(int,group_id,"integer","group_id")
             group = Group.objects.get(id = group_id)
             
@@ -118,7 +117,7 @@ class GroupView(APIView):
             if group_name:
                 if Group.objects.filter(name=group_name).exists():
                     return Response({"status":"failed","message":f"'{group_name}' already exist please enter another 'group_name'"},status=status.HTTP_400_BAD_REQUEST)
-                
+            
                 group.name = group_name
                 group.save()
             return Response({"status":"success","message":"Group updated successfully..."},status=status.HTTP_200_OK)
@@ -142,6 +141,7 @@ class GroupView(APIView):
             group_id = request.data.get('group_id')
             if not group_id:
                 return Response({"status":"failed","message":"'group_id' must be required"},status=status.HTTP_400_BAD_REQUEST)
+            
             group_id = isValid_type(int,group_id,"integer","group_id")
             group = Group.objects.get(id = group_id)
             
@@ -179,6 +179,7 @@ def exit_group(request):
 
         if not group_id:
             return Response({"status":"failed","message":"'group_id' must be required"},status=status.HTTP_400_BAD_REQUEST)
+        
         group_id = isValid_type(int,group_id,"integer","group_id")
         group = Group.objects.get(id = group_id)
         

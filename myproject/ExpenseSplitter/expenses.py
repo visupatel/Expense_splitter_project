@@ -10,6 +10,7 @@ from .validation import isValid_type
 from django.utils import timezone
 from django.core.mail import send_mail
 from rest_framework.decorators import api_view,permission_classes
+from decimal import Decimal
 
 
 
@@ -17,19 +18,19 @@ class ExpenseView(APIView):
     def send_alert(self,group,item):
         if Budget.objects.filter(group = group,category = item).exists():
             budget = Budget.objects.get(group = group,category = item)
-        
-        expense = Expense.objects.filter(item=item)
-        sum = 0
-        for amount in expense:
-            if not (amount.date.month == budget.date.month and amount.date.year == budget.date.year):
-                sum += amount.amount_paid
-                # print("sum:",sum)
-        if sum <= budget.monthly_budget:
-            member_emails = [email['email'] for email in group.members.values("email")]
-            for email in member_emails:
-                subject = "Alert Message"
-                message = f"Alert, Budget out of limit.\nYour limit for {budget.category} = {budget.monthly_budget} but now your total amount for {item} = {sum} "
-                send_mail(subject,message,from_email="expense_system@gmail.com",recipient_list=[email],fail_silently=False)
+            expense = Expense.objects.filter(item=item)
+            
+            sum = 0
+            for amount in expense:
+                if (amount.date.month == budget.date.month and amount.date.year == budget.date.year):
+                    sum += amount.amount_paid
+                    
+            if sum >= budget.monthly_budget:
+                member_emails = [email['email'] for email in group.members.values("email")]
+                for email in member_emails:
+                    subject = "Alert Message"
+                    message = f"Alert, Budget out of limit.\nYour limit for {budget.category} = {budget.monthly_budget} but now your total amount for {item} = {sum} "
+                    send_mail(subject,message,from_email="expense_system@gmail.com",recipient_list=[email],fail_silently=False)
 
     def post(self,request):
         try:
@@ -57,15 +58,12 @@ class ExpenseView(APIView):
             group = Group.objects.get(id = group_id)
             paid_by = isValid_type(int,paid_by,"integer","paid_by")
             user = User.objects.get(id = paid_by)
-
-            budget_category = Budget.objects.get(group = group,category = item)
-            print("budget_category:",budget_category)
             
             if not group.members.filter(id = request.user.id).exists():
                 return Response({"status":"failed","message":"You are not access this group because you are not the member of this group"},status=status.HTTP_401_UNAUTHORIZED)
 
             if not group.members.filter(id = paid_by).exists():
-                return Response({"status":"failed","message":f"{paid_by} is not a member of this group"},status=status.HTTP_400_BAD_REQUEST)
+                return Response({"status":"failed","message":f"{user.username} is not a member of this group"},status=status.HTTP_400_BAD_REQUEST)
 
             members = []
             if skipped_member:
@@ -88,7 +86,7 @@ class ExpenseView(APIView):
                     images.append(new_img)
             
             with transaction.atomic():
-                expense = Expense.objects.create(group=group,item=item,amount_paid=amount,paid_by=user,date=date,reciept=images)
+                expense = Expense.objects.create(group=group,item=item,amount_paid=amount,paid_by=user,date=date,receipt=images)
                 expense.skipped_member.set(members)
                 self.send_alert(group,item)
                 return Response({"status":"success","message":"Expense created successfully..."},status=status.HTTP_200_OK)
@@ -105,7 +103,6 @@ class ExpenseView(APIView):
         
         except Exception as e:
             return Response({"status":"error","message":str(e)},status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 
     def get(self,request):
         try:
@@ -144,8 +141,6 @@ class ExpenseView(APIView):
         
         except Exception as e:
             return Response({"status":"error","message":str(e)},status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
 
     def put(self,request):
         try:
@@ -217,8 +212,6 @@ class ExpenseView(APIView):
         except Exception as e:
             return Response({"status":"error","message":str(e)},status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-
-
     def delete(self,request):
         try:
             expense_id = request.data.get('expense_id')
@@ -248,10 +241,6 @@ class ExpenseView(APIView):
             return Response({"status":"error","message":str(e)},status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-
-
-
-
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def calculate_group_balances(request):
@@ -264,9 +253,11 @@ def calculate_group_balances(request):
         group_id = isValid_type(int,group_id,'integer','group_id')
 
         group = Group.objects.get(id = group_id)
+
         if not group.members.filter(id = request.user.id).exists():
             return Response({"status":"failed","message":"You can not access this group because you are not the member of this group"})
         
+        ExpenseSplit.objects.filter(group=group).delete()
         members = group.members.all()
         expenses = Expense.objects.filter(group = group)
 
@@ -287,6 +278,7 @@ def calculate_group_balances(request):
                 continue
 
             share = float(expense.amount_paid)/participate
+            share = share
 
             for member in members:
                 if member not in skipped:
@@ -306,8 +298,9 @@ def calculate_group_balances(request):
                 for payer,payer_balance in balances.items():
                     if payer_balance < 0 and new_balance > 0:
                         amount = min(abs(payer_balance), new_balance)
+                        amount = round(amount,2)
                         result.append(f"'{payer}' need to pay {amount} to '{user}'")
-
+                
                         payer_user = User.objects.get(username=payer)
                         receiver_user = User.objects.get(username=user)
 
@@ -317,11 +310,11 @@ def calculate_group_balances(request):
                             receiver=receiver_user,
                             amount=amount
                         )
-
-                        balances[payer_balance] += amount
+                        
+                        balances[payer] += amount
                         new_balance -= amount
 
-        return Response({"status":"success","message":"Balance calculated...","who_paid_whom":result},status=status.HTTP_200_OK)
+        return Response({"status":"success","message":"Balance calculated...","data":result},status=status.HTTP_200_OK)
     
     except ValueError as e:
         return Response({"status":"failed","message":str(e)},status=status.HTTP_400_BAD_REQUEST)
