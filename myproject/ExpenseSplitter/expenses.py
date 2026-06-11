@@ -13,16 +13,24 @@ from rest_framework.decorators import api_view,permission_classes
 
 
 class ExpenseView(APIView):
+
+    # send alert mail to all group members if their monthly budget limit is crossed.
     def send_alert(self,group,item):
+
+        # if category for that group is exist then fetch it.
         if Budget.objects.filter(group = group,category = item).exists():
             budget = Budget.objects.get(group = group,category = item)
-            expense = Expense.objects.filter(item=item)
+
+            # fetch query set of category of that group to calculate sum of it's amount
+            expense = Expense.objects.filter(group = group, item=item)    
             
             sum = 0
             for amount in expense:
+                # check month and year of expense and budget is same(because send mail for monthly limit)
                 if (amount.date.month == budget.date.month and amount.date.year == budget.date.year):
                     sum += amount.amount_paid
-                    
+                
+            # if sum of expenses is higher then monthly budget then send mail to all the group members
             if sum >= budget.monthly_budget:
                 member_emails = [email['email'] for email in group.members.values("email")]
                 for email in member_emails:
@@ -50,24 +58,31 @@ class ExpenseView(APIView):
                 return Response({"status":"failed","message":"'paid_by' must be required"},status=status.HTTP_400_BAD_REQUEST)
             
             group_id = isValid_type(int,group_id,"integer","group_id")
+            
             amount = isValid_type(float,amount,"decimal or integer","total_amount")
+            
             item = item.strip().replace(" ","").capitalize()
             
             group = Group.objects.get(id = group_id)
+            
             paid_by = isValid_type(int,paid_by,"integer","paid_by")
             user = User.objects.get(id = paid_by)
             
             if not group.members.filter(id = request.user.id).exists():
                 return Response({"status":"failed","message":"You are not access this group because you are not the member of this group"},status=status.HTTP_401_UNAUTHORIZED)
 
+            # if who paid the amount is not a group member.
             if not group.members.filter(id = paid_by).exists():
                 return Response({"status":"failed","message":f"{user.username} is not a member of this group"},status=status.HTTP_400_BAD_REQUEST)
 
             members = []
             if skipped_member:
                 for member in skipped_member.split(","):
+
+                    # if skipped member is not a group member.
                     if not group.members.filter(id = member).exists():
                         return Response({"status":"failed","message":f"{member} is not a member of this group"},status=status.HTTP_400_BAD_REQUEST)
+                    
                     skipped = User.objects.get(id = member)
                     members.append(skipped)
 
@@ -85,8 +100,11 @@ class ExpenseView(APIView):
             
             with transaction.atomic():
                 expense = Expense.objects.create(group=group,item=item,amount_paid=amount,paid_by=user,date=date,receipt=images)
-                expense.skipped_member.set(members)
-                self.send_alert(group,item)
+
+                # set skipped member for this expense(set --> add member and remove existing one).
+                expense.skipped_member.set(members)     
+
+                self.send_alert(group,item)  # if item and group matched then send mail
                 return Response({"status":"success","message":"Expense created successfully..."},status=status.HTTP_200_OK)
 
         except ValueError as e:
@@ -106,12 +124,13 @@ class ExpenseView(APIView):
         try:
             expense_id = request.data.get('expense_id')
             if not expense_id:
-                return Response({"status":"failed","message":"'expense_id' must be required"})
+                return Response({"status":"failed","message":"'expense_id' must be required"},status=status.HTTP_400_BAD_REQUEST)
             
             expense_id = isValid_type(int,expense_id,'integer','expense_id')
             expense = Expense.objects.get(id = expense_id)
+            
             if not expense.group.members.filter(id = request.user.id).exists():
-                return Response({"status":"failed","message":"You can not access this group because you are not the member of this group"})
+                return Response({"status":"failed","message":"You can not access this group because you are not the member of this group"},status=status.HTTP_401_UNAUTHORIZED)
             
             skipped_members = [val['id'] for val in expense.skipped_member.values("id")]
             return Response({
@@ -151,12 +170,13 @@ class ExpenseView(APIView):
             reciept = request.FILES.getlist('receipt')
 
             if not expense_id:
-                return Response({"status":"failed","message":"'expense_id' must be required"})
+                return Response({"status":"failed","message":"'expense_id' must be required"},status=status.HTTP_400_BAD_REQUEST)
             
             expense_id = isValid_type(int,expense_id,"integer","expese_id")
             expense = Expense.objects.get(id = expense_id)
+
             if not expense.group.members.filter(id = request.user.id).exists():
-                return Response({"status":"failed","message":"You can not access this group because you are not the member of this group"})
+                return Response({"status":"failed","message":"You can not access this group because you are not the member of this group"},status=status.HTTP_401_UNAUTHORIZED)
 
             if item:
                 item = item.strip().replace(" ","").capitalize()
@@ -177,6 +197,7 @@ class ExpenseView(APIView):
                 for member in skipped_member.split(","):
                     if not expense.group.members.filter(id = member).exists():
                         return Response({"status":"failed","message":f"{member} is not a member of this group"},status=status.HTTP_400_BAD_REQUEST)
+                    
                     skipped = User.objects.get(id = member)
                     members.append(skipped)
                 expense.skipped_member.set(members)
@@ -198,7 +219,6 @@ class ExpenseView(APIView):
                 self.send_alert(group=expense.group,item=item)
                 return Response({"status":"success","message":"Expense updated successfully..."},status=status.HTTP_200_OK)
 
-
         except ValueError as e:
             if "time data" in str(e):
                 return Response({"status":"failed","message":f"date  does not match the format 'YYYY-MM-DD'"},status=status.HTTP_400_BAD_REQUEST)
@@ -218,6 +238,7 @@ class ExpenseView(APIView):
             
             expense_id = isValid_type(int,expense_id,'integer','expense_id')
             expense = Expense.objects.get(id = expense_id)
+            
             if not expense.group.members.filter(id = request.user.id).exists():
                 return Response({"status":"failed","message":"You can not access this group because you are not the member of this group"})
             
@@ -255,46 +276,68 @@ def calculate_group_balances(request):
         if not group.members.filter(id = request.user.id).exists():
             return Response({"status":"failed","message":"You can not access this group because you are not the member of this group"})
         
-        ExpenseSplit.objects.filter(group=group).delete()
+        # Delete existing expense splits for the group to prevent duplicate records, when the API is called multiple times.
+        ExpenseSplit.objects.filter(group=group).delete()     
+
         members = group.members.all()
         expenses = Expense.objects.filter(group = group)
 
         total_paid = {}
         total_share = {}
+
+        # first set all members is paid and share 0 amount.
         for member in members:
             total_paid[member.username] = 0.0
             total_share[member.username] = 0.0
 
         for expense in expenses:
-            if  expense.paid_by.username in total_paid.keys():
+
+            # if member is paid amount then add the current expense amount.
+            if expense.paid_by.username in total_paid.keys():
                 total_paid[expense.paid_by.username] += float(expense.amount_paid)
 
             skipped = expense.skipped_member.all()
+
+            # calculate who paricipates for categories.
             participate = len(members) - len(expense.skipped_member.all())
 
+            # prevent if all members are skipped.
             if participate == 0:
                 continue
-
+            
+            # calculate member's share
             share = float(expense.amount_paid)/participate
-            share = share
 
             for member in members:
                 if member not in skipped:
+
+                    # if not kipped member share is added in dict.
                     if member.username in total_share.keys():
                         total_share[member.username] += share
         
         balances = {}
         for member in members:
             username = member.username
+
+            # calculate balance of members.
+            # if balance is (+) then other member pays to this memebr, 
+            # if balance (-) this member need to pay to other.)
             balances[username] = round(total_paid[username] - total_share[username],2)
 
         result = []
         for user,balance in balances.items():
+
+            # if balance is (+) then other member pays to this memebr.
             if balance > 0:
                 new_balance = balance
 
                 for payer,payer_balance in balances.items():
+
+                    # if payer balance is (-) and receiver balance is (+).
+                    # find minimum value of them and that amount need to pay by payer to reciever.
                     if payer_balance < 0 and new_balance > 0:
+
+                        # use abs to convert (-) to (+) because(min(-500,200) = 500 which is wrong)
                         amount = min(abs(payer_balance), new_balance)
                         amount = round(amount,2)
                         result.append(f"'{payer}' need to pay {amount} to '{user}'")
@@ -309,6 +352,8 @@ def calculate_group_balances(request):
                             amount=amount
                         )
                         
+                        # update payer balance because, if he has -90 and he paid is so it become 0.
+                        # when again loop is running for reciever it ignore 0 amount.
                         balances[payer] += amount
                         new_balance -= amount
 

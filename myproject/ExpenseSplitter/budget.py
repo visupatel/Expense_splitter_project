@@ -25,15 +25,17 @@ class BudgetView(APIView):
             if not amount:
                 return Response({"status":"failed","message":"'budget' must be required"},status=status.HTTP_400_BAD_REQUEST)
             if date:
-                date = datetime.strptime(date,"%Y-%m-%d").date()
+                # check requested date is in (YYYY-MM-DD) format. If it is not then raise valueerror.
+                date = datetime.strptime(date,"%Y-%m-%d").date()      # .date() give the date only not add time.
             else:
-                date = timezone.now().date()
-            date = date.replace(day=1)
+                date = timezone.now().date()         # current date
+
+            date = date.replace(day=1)        # reaplace day into 1 date( ex: 2026-06-25 --> 2026-06-01)
 
             group_id = isValid_type(int,group_id,'integer',"group_id")
             group = Group.objects.get(id = group_id)
             
-            if not group.members.filter(id = request.user.id).exists():
+            if not group.members.filter(id = request.user.id).exists():    # to check authenticated user is in this group or not.
                 return Response({
                 "status": "failed",
                 "message": "You cannot manage the budget because you are not a member of this group."
@@ -45,15 +47,22 @@ class BudgetView(APIView):
             if amount <= 0:
                 return Response({"status":"failed","message":"'budget' amount must be greater than 0"},status=status.HTTP_400_BAD_REQUEST)
             
-            category = category.strip().replace(" ","").capitalize()
+            category = category.strip().replace(" ","").capitalize()    # convert category in same format for all(ex:    luNCh  FoOD   -->Lunchfood)
+
             with transaction.atomic():
+
+                # If category for that group is already present then update only amount and date.
+                """outside default fields are checked with and operators(group and category) if both is already 
+                present then updated default fields only."""
+
                 Budget.objects.update_or_create(group=group,category=category,defaults={"monthly_budget":amount,"date":date})
                 return Response({"status":"success","message":"Budget created successfully..."},status=status.HTTP_200_OK)
         
         except ValueError as e:
-            if "time data" in str(e):
+            if "time data" in str(e):      # ValueError for date format
                 return Response({"status":"failed","message":f"date '{date}' does not match the format 'YYYY-MM-DD'"},status=status.HTTP_400_BAD_REQUEST)
-   
+
+            # for type conversion
             return Response({"status":"failed","message":str(e)},status=status.HTTP_400_BAD_REQUEST)
         
         except Group.DoesNotExist:
@@ -106,6 +115,7 @@ class BudgetView(APIView):
             
             budget_id = isValid_type(int,budget_id,'integer',"group_id")
             budget = Budget.objects.get(id = budget_id)
+            
             is_member = budget.group.members.filter(username = request.user.username).exists()
             if not is_member:
                 return Response({"status":"failed","message":"You are not access this group becuase you are not the member of this group"},status=status.HTTP_401_UNAUTHORIZED)
@@ -113,6 +123,7 @@ class BudgetView(APIView):
             if category:
                 category = category.strip().replace(" ","").capitalize()
                 
+                # check if the category is already exist for group and exclude current budget to being updated.
                 if Budget.objects.filter(group = budget.group, category=category).exclude(id=budget.id).exists():
                     return Response({"status":"failed","message":f"'{category}' category name is aready exists try another cateory name."},status=status.HTTP_400_BAD_REQUEST)
                 budget.category = category
@@ -153,14 +164,15 @@ class BudgetView(APIView):
                 return Response({"status":"failed","message":"'budget_id' must be required"},status=status.HTTP_400_BAD_REQUEST)
 
             budget_id = isValid_type(int,budget_id,"integer","budget_id")
-
             budget = Budget.objects.get(id = budget_id)
+            
             is_member = budget.group.members.filter(username = request.user.username).exists()
             if not is_member:
                 return Response({"status":"failed","message":"You are not access this group becuase you are not the member of this group"},status=status.HTTP_401_UNAUTHORIZED)
 
-            budget.delete()
-            return Response({"status":"success","message":f"'{budget.category}' Budget deleted successfully.."},status=status.HTTP_200_OK)
+            with transaction.atomic():
+                budget.delete()
+                return Response({"status":"success","message":f"'{budget.category}' Budget deleted successfully.."},status=status.HTTP_200_OK)
 
         except ValueError as e:
             return Response({"status":"failed","message":str(e)},status=status.HTTP_400_BAD_REQUEST)

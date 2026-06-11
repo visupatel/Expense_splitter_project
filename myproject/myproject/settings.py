@@ -40,7 +40,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'ExpenseSplitter',
     'rest_framework_simplejwt',
-    'rest_framework_simplejwt.token_blacklist', 
+    'rest_framework_simplejwt.token_blacklist',   # to add refresh token
 ]
 
 MIDDLEWARE = [
@@ -83,6 +83,8 @@ WSGI_APPLICATION = 'myproject.wsgi.application'
 #     }
 # }
 
+
+# connect with postgresql
 DATABASES = {
     'default':{
         'ENGINE':'django.db.backends.postgresql',
@@ -146,4 +148,5 @@ SIMPLE_JWT= {
     'REFRESH_TOKEN_LIFETIME':timedelta(days=30),
 }
 
+# send email in terminal not actually send the mail to real email id.
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'

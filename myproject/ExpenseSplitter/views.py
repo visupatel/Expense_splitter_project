@@ -7,27 +7,6 @@ from django.db import transaction
 from rest_framework.views import APIView
 from .validation import isValid_type
 
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def getuser(request):
-    try:
-        user = request.user
-
-        return Response({
-            "status":"success",
-            "message":"user data...",
-            "user_id":user.id,
-            "username":user.username
-        },
-        status=status.HTTP_200_OK
-        )
-    except Exception as e:
-        return Response({
-            "message":str(e)
-        },
-        status=status.HTTP_500_INTERNAL_SERVER_ERROR
-        )
-
 class GroupView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -39,9 +18,12 @@ class GroupView(APIView):
             if not group_name:
                 return Response({"status":"failed","message":"'name' must be required"},status=status.HTTP_400_BAD_REQUEST)
             
-            if Group.objects.filter(name = group_name).exists():
+            # handle duplication group name, to check group is already present or not.
+            if Group.objects.filter(name = group_name).exists():  
                 return Response({"status":"failed","message":f"'{group_name}' already exist, Enter another name"},status=status.HTTP_400_BAD_REQUEST)
 
+            """Apply changes to connected database tables in a single transaction. Ensure all operaions succeed together.
+            If any operation fails, all changes are rolled back."""
             with transaction.atomic():
                 new_group = Group.objects.create(name = group_name)
                 new_group.members.add(request.user)
@@ -73,6 +55,7 @@ class GroupView(APIView):
             if not group.members.filter(id = request.user.id).exists():
                 return Response({"status":"failed","message":"You are not access this group becuase you are not the member of this group"},status=status.HTTP_401_UNAUTHORIZED)
             
+            # return values of members
             group_members =  group.members.values("id","username","email")
            
             return Response({
@@ -119,8 +102,10 @@ class GroupView(APIView):
                     return Response({"status":"failed","message":f"'{group_name}' already exist please enter another 'group_name'"},status=status.HTTP_400_BAD_REQUEST)
             
                 group.name = group_name
+            with transaction.atomic():
                 group.save()
-            return Response({"status":"success","message":"Group updated successfully..."},status=status.HTTP_200_OK)
+                return Response({"status":"success","message":"Group updated successfully..."},status=status.HTTP_200_OK)
+        
         except ValueError as e:
             return Response({"status":"failed","message":str(e)},status=status.HTTP_400_BAD_REQUEST)
 
@@ -147,9 +132,11 @@ class GroupView(APIView):
             
             if not group.members.filter(id = request.user.id).exists():
                 return Response({"status":"failed","message":"You are not access this group becuase you are not the member of this group"},status=status.HTTP_401_UNAUTHORIZED)
-                
-            group.delete()
-            return Response({"status":"success","message":"Group deleted successfully..."},status=status.HTTP_200_OK)
+            
+            with transaction.atomic():
+                group.delete()
+                return Response({"status":"success","message":"Group deleted successfully..."},status=status.HTTP_200_OK)
+        
         except ValueError as e:
             return Response({"status":"failed","message":str(e)},status=status.HTTP_400_BAD_REQUEST)
 
@@ -187,10 +174,12 @@ def exit_group(request):
             return Response({"status":"failed","message":"You are not access this group becuase you are not the member of this group"},status=status.HTTP_401_UNAUTHORIZED)
 
         member = group.members.get(email = email)
-        group.members.remove(member)
+        group.members.remove(member)      # remove member from the group
 
         user = User.objects.get(email=email)
-        if request.user.email == email:
+
+        # to check member is exit by it self or removed by any group member.
+        if request.user.email == email:  
             return Response({"status":"success","message":f"'{user.username}' exit from '{group.name}' group"},status=status.HTTP_200_OK)
         else:
             return Response({"status":"success","message":f"'{user.username}' remove by '{request.user}'"},status=status.HTTP_200_OK)

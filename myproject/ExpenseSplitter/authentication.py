@@ -36,6 +36,7 @@ def userregister(request):
             status=status.HTTP_400_BAD_REQUEST
             )
         
+        # check email format(validation.py)
         if not isValid_email(email):
             return Response({
                 "status":"failed",
@@ -52,7 +53,7 @@ def userregister(request):
             status=status.HTTP_208_ALREADY_REPORTED
             )
         
-        email = email.lower()
+        email = email.lower()     # convert email in lowecase
 
         if User.objects.filter(email=email).exists():
             return Response({
@@ -62,14 +63,15 @@ def userregister(request):
             status=status.HTTP_208_ALREADY_REPORTED
             )
         
-        hashed_password = make_password(password)     
         #Turn a plain-text password into a hash for database storage
+        hashed_password = make_password(password)     
 
         user = User.objects.create(username=username,password=hashed_password,email=email)
-        token = generate_token(user)   
+        token = generate_token(user)        #generate token(token.py)
 
-        group_id = request.GET.get('group_id') 
+        group_id = request.GET.get('group_id')     # to get group_id directly from the url parameter
         message = f"User '{username}' registered successfully..."
+        
         if group_id:
             group = Group.objects.get(id = group_id)
             group.members.add(user)
@@ -79,7 +81,7 @@ def userregister(request):
             "status":"success",
             "message":message,
             "refresh":str(token),
-            "access":str(token.access_token)
+            "access":str(token.access_token)      # convert refresh token to access token
         },
         status=status.HTTP_201_CREATED
         )
@@ -121,7 +123,8 @@ def userlogin(request):
             user = User.objects.get(username=username)
         except User.DoesNotExist:
             user = None
-
+        
+        # check_password is convert requested password in hash and compare with user db password.
         if user is None or not check_password(password,user.password):
             return Response({
                 "status":"failed",
@@ -130,7 +133,9 @@ def userlogin(request):
             status=status.HTTP_401_UNAUTHORIZED
             )
         
+        # update the last_login date if user logging in.
         update_last_login(None, user)
+
         token = generate_token(user)
         return Response({
             "status":"success",
@@ -166,7 +171,7 @@ def forgot_password(request):
         email = email.lower()
         user = User.objects.get(email=email)
 
-        user = generate_otp(user)
+        user = generate_otp(user)      # generate otp(token.py)
         return Response({
             "status":"success",
             "message":"OTP generated..",
@@ -225,7 +230,7 @@ def reset_password(request):
         email = email.lower()
         user = User.objects.get(email=email)
 
-        if str(otp) != user.otp:
+        if str(otp) != user.otp:        # if otp is not mached.
             return Response({
                 "status":"failed",
                 "message":"Invalid OTP please enter valid OTP"
@@ -233,7 +238,7 @@ def reset_password(request):
             status=status.HTTP_400_BAD_REQUEST
             )
         
-        if user.otp_exp < timezone.now():
+        if user.otp_exp < timezone.now():    # if time is greater than 10 minutes then otp is expired.
             return Response({
                 "status":"failed",
                 "message":"OTP expired.."
@@ -242,7 +247,7 @@ def reset_password(request):
             )
         
         user.password = make_password(new_password)
-        user.otp = None
+        user.otp = None       # Again set otp to none in db 
         user.save()
 
         return Response({
@@ -278,10 +283,16 @@ def logout(request):
         if not refresh_token:
             return Response({"status":"failed","message":"'refresh_token' must be required"})
 
-        token = RefreshToken(refresh_token)
-        token.blacklist()          
+        """requested refresh_token is a plain text string so RefreshToken() validate
+        that token and convert that string into object"""
+        token = RefreshToken(refresh_token)   
+
+        # store refresh token in db blacklist so user can not generete access token with that refresh token 
+        token.blacklist()  
+
         return Response({"status":"success","message":"User logged out successfully"},status=status.HTTP_200_OK)
     
+    # if refresh token is already expired then raise tokenerror. TokenError catches expired,invalid or tampered tokens
     except TokenError:
         return Response({"status":"success","message":"Token is already invalid,Logged out successfully"},status=status.HTTP_200_OK)
     

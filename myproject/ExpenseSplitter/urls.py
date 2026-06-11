@@ -8,7 +8,6 @@ from .expenses import *
 
 urlpatterns = [
     path('register/',userregister),
-    path('getuser/',getuser),
     path('login/',userlogin),
     path('logout/',logout),
     path('forgot_password/',forgot_password),

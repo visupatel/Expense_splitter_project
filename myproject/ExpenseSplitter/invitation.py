@@ -22,6 +22,7 @@ def send_invitation_link(request):
        
         group_id = isValid_type(int,group_id,"integer","group_id")
         group = Group.objects.get(id = group_id)
+        
         emails = emails.split(",")
         
         if not group.members.filter(id = request.user.id).exists():
@@ -32,14 +33,17 @@ def send_invitation_link(request):
             status=status.HTTP_401_UNAUTHORIZED
             )
     
-        inviter_name = request.user.username
-        inviter_mail = request.user.email
+        inviter_name = request.user.username    # authorized person usename
+        inviter_mail = request.user.email         # authorized person email
+
         subject = f"Invited to join the '{group.name}' group"
     
         for email in emails:
+
+            # create url for invitation
             invitation_link = request.build_absolute_uri(f'/api/invitation_link/{group.id}/{email}/')
             message = f"Hello Dear,\n\n{inviter_name} invited you to join the '{group.name}' group.To join the group please click on below link.\n{invitation_link}"
-            send_mail(subject=subject,message=message,from_email=inviter_mail,recipient_list=[email],fail_silently=False)
+            send_mail(subject=subject,message=message,from_email=inviter_mail,recipient_list=[email],fail_silently=False)    # fail_silently is used to prevent email to fail silently
 
         return Response({
             "status":"success",
@@ -81,6 +85,8 @@ def join_group(request,group_id,email):
     try:
         group = Group.objects.get(id = group_id)
         user_exist = group.members.filter(email=email).exists()
+
+        # if user is already member of the group
         if user_exist:
             return Response({
                 "status":"failed",
@@ -89,15 +95,18 @@ def join_group(request,group_id,email):
             status=status.HTTP_208_ALREADY_REPORTED
             )
         
+        # if user is already rgistered in the app then add directly
         user = User.objects.get(email=email)
         group.members.add(user)
+
         return Response({
             "status":"success",
             "message":f"Welcome! You are joined in '{group.name}' group. Now you are the member of '{group.name}'"
         },
         status=status.HTTP_202_ACCEPTED
         )
-        
+    
+    # if user is not registered in the app then send link for registration.
     except User.DoesNotExist:
         link = request.build_absolute_uri(f'/api/register/?group_id={group.id}')
         return Response({
