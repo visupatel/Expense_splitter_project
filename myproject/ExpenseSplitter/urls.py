@@ -19,5 +19,6 @@ urlpatterns = [
     path('exit_group/',exit_group),
     path('manage_budget/',BudgetView.as_view()),
     path('add_expenses/',ExpenseView.as_view()),
-    path('calculate_balance/',calculate_group_balances)
+    path('calculate_balance/',calculate_group_balances),
+    path('calculate_expense/',calculate_expense),
 ]

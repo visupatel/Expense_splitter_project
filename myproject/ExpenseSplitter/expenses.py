@@ -109,7 +109,7 @@ class ExpenseView(APIView):
 
         except ValueError as e:
             if "time data" in str(e):
-                return Response({"status":"failed","message":f"date  does not match the format 'YYYY-MM-DD'"},status=status.HTTP_400_BAD_REQUEST)
+                return Response({"status":"failed","message":f"date {date} does not match the format 'YYYY-MM-DD'"},status=status.HTTP_400_BAD_REQUEST)
             return Response({"status":"failed","message":str(e)},status=status.HTTP_400_BAD_REQUEST)
         
         except Group.DoesNotExist:
@@ -122,43 +122,46 @@ class ExpenseView(APIView):
 
     def get(self,request):
         try:
-            expense_id = request.data.get('expense_id')
-            if not expense_id:
-                return Response({"status":"failed","message":"'expense_id' must be required"},status=status.HTTP_400_BAD_REQUEST)
+            group_id = request.data.get('group_id')
+            if not group_id:
+                return Response({"status":"failed","message":"'group_id' must be required"},status=status.HTTP_400_BAD_REQUEST)
             
-            expense_id = isValid_type(int,expense_id,'integer','expense_id')
-            expense = Expense.objects.get(id = expense_id)
-            
-            if not expense.group.members.filter(id = request.user.id).exists():
+            group_id = isValid_type(int,group_id,'integer','group_id')
+            group = Group.objects.get(id = group_id)
+            expenses = Expense.objects.filter(group = group)
+
+            if not group.members.filter(id = request.user.id).exists():
                 return Response({"status":"failed","message":"You can not access this group because you are not the member of this group"},status=status.HTTP_401_UNAUTHORIZED)
-            
-            skipped_members = [val['id'] for val in expense.skipped_member.values("id")]
+
+            list_expenses = []
+            for expense in expenses:
+                skipped_members = [val['id'] for val in expense.skipped_member.values("id")]
+                list_expenses.append({
+                        "id":expense.id,
+                        "item":expense.item,
+                        "total_amount":expense.amount_paid,
+                        "paid_by":expense.paid_by.username,
+                        "skipped_members":skipped_members,
+                        "date":expense.date,
+                        "receipt":expense.receipt
+                    })
             return Response({
                 "status":"success",
                 "message":"Expense fetched",
-                "data":{
-                    "id":expense.id,
-                    "group":expense.group.name,
-                    "item":expense.item,
-                    "total_amount":expense.amount_paid,
-                    "paid_by":expense.paid_by.username,
-                    "skipped_members":skipped_members,
-                    "date":expense.date,
-                    "receipt":expense.receipt
-                    }
+                f"{group.name}":list_expenses
                 },
                 status=status.HTTP_200_OK
                 )
         
         except ValueError as e:
             return Response({"status":"failed","message":str(e)},status=status.HTTP_400_BAD_REQUEST)
-        
-        except Expense.DoesNotExist:
-            return Response({"status":"failed","message":"Expense not found"},status=status.HTTP_404_NOT_FOUND)
+                
+        except Group.DoesNotExist:
+            return Response({"status":"failed","message":"Group not found"},status=status.HTTP_404_NOT_FOUND)
         
         except Exception as e:
             return Response({"status":"error","message":str(e)},status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
+    
     def put(self,request):
         try:
             expense_id = request.data.get('expense_id')
@@ -175,6 +178,7 @@ class ExpenseView(APIView):
             expense_id = isValid_type(int,expense_id,"integer","expese_id")
             expense = Expense.objects.get(id = expense_id)
 
+            print("expense:",expense)
             if not expense.group.members.filter(id = request.user.id).exists():
                 return Response({"status":"failed","message":"You can not access this group because you are not the member of this group"},status=status.HTTP_401_UNAUTHORIZED)
 
@@ -216,12 +220,13 @@ class ExpenseView(APIView):
 
             with transaction.atomic():
                 expense.save()
-                self.send_alert(group=expense.group,item=item)
+                
+                self.send_alert(group=expense.group,item=expense.item)
                 return Response({"status":"success","message":"Expense updated successfully..."},status=status.HTTP_200_OK)
 
         except ValueError as e:
             if "time data" in str(e):
-                return Response({"status":"failed","message":f"date  does not match the format 'YYYY-MM-DD'"},status=status.HTTP_400_BAD_REQUEST)
+                return Response({"status":"failed","message": f"date {date} does not match the format 'YYYY-MM-DD'"},status=status.HTTP_400_BAD_REQUEST)
             return Response({"status":"failed","message":str(e)},status=status.HTTP_400_BAD_REQUEST)
 
         except Expense.DoesNotExist:
@@ -254,13 +259,13 @@ class ExpenseView(APIView):
             return Response({"status":"failed","message":str(e)},status=status.HTTP_400_BAD_REQUEST)
         
         except Expense.DoesNotExist:
-            return Response({"status":"failed","message":str(e)},status=status.HTTP_400_BAD_REQUEST)
+            return Response({"status":"failed","message":"Expense not found"},status=status.HTTP_400_BAD_REQUEST)
         
         except Exception as e:
             return Response({"status":"error","message":str(e)},status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-@api_view(['GET'])
+@api_view(['POST','GET'])
 @permission_classes([IsAuthenticated])
 def calculate_group_balances(request):
     try:
@@ -324,6 +329,7 @@ def calculate_group_balances(request):
             # if balance (-) this member need to pay to other.)
             balances[username] = round(total_paid[username] - total_share[username],2)
 
+        print("balance:",balances)
         result = []
         for user,balance in balances.items():
 
@@ -368,4 +374,51 @@ def calculate_group_balances(request):
     except Exception as e:
         return Response({"status":"error","message":str(e)},status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
+# calculate total expenses by range of date and specific category.
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def calculate_expense(request):
+    try:
+        group_id = request.data.get('group_id')
+        category = request.data.get('category')
+        start_date = request.data.get('start_date')
+        end_date = request.data.get('end_date')
+
+        if not group_id:
+            return Response({"status":"failed","message":"'group_id' must be required"},status=status.HTTP_400_BAD_REQUEST)
+        
+        group_id = isValid_type(int,group_id,"integer","group_id")
+        group = Group.objects.get(id = group_id)
+
+        if not group.members.filter(id = request.user.id).exists():
+            return Response({"status":"failed","message":"You can not access this group because you are not the member of this group"})
+
+        expenses = Expense.objects.filter(group = group_id)
+
+        if category:
+            category = category.strip().replace(" ","").capitalize()
+            expenses = Expense.objects.filter(item = category)
+
+        if start_date and end_date:
+            start_date = datetime.strptime(start_date,"%Y-%m-%d").date()
+            end_date = datetime.strptime(end_date,"%Y-%m-%d").date()
+
+            expenses = expenses.filter(
+                date__range=[start_date, end_date]
+            )
+
+        total_expense = 0
+        for expense in expenses:
+            total_expense += float(expense.amount_paid)
+
+        return Response({"status":"success","message":"Expense calculated...","expense":{"total_expense":round(total_expense,2)}},status=status.HTTP_200_OK)
     
+    except ValueError as e:
+        if "time data" in str(e):
+            return Response({"status":"failed","message":f"date 'start_date' = {start_date} or 'end_date' = {end_date} does not match the format 'YYYY-MM-DD'"},status=status.HTTP_400_BAD_REQUEST)
+        return Response({"status":"failed","message":str(e)},status=status.HTTP_400_BAD_REQUEST)
+    except Group.DoesNotExist:
+            return Response({"status":"failed","message":"Group not found"},status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({"status":"error","message":str(e)},status=status.HTTP_500_INTERNAL_SERVER_ERROR)

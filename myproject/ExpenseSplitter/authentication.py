@@ -75,7 +75,7 @@ def userregister(request):
         if group_id:
             group = Group.objects.get(id = group_id)
             group.members.add(user)
-            message += f"\nYou are successfully joined in {group.name}"
+            message += f"You are successfully joined in {group.name}"
 
         return Response({
             "status":"success",
