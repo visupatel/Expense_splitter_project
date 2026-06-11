@@ -1,7 +1,6 @@
 from datetime import timedelta
 from django.utils import timezone
 from rest_framework_simplejwt.tokens import RefreshToken
-from .models import User
 import random
 
 def generate_token(user):

@@ -1,5 +1,4 @@
 from django.core.validators import validate_email
-from django.core.exceptions import ValidationError
 
 def isValid_email(email):
     try:
