@@ -311,7 +311,7 @@ def calculate_group_balances(request):
             for member in members:
                 if member not in skipped:
 
-                    # if not kipped member share is added in dict.
+                    # add share of member who not skipped.
                     if member.username in total_share.keys():
                         total_share[member.username] += share
         
@@ -352,8 +352,8 @@ def calculate_group_balances(request):
                             amount=amount
                         )
                         
-                        # update payer balance because, if he has -90 and he paid is so it become 0.
-                        # when again loop is running for reciever it ignore 0 amount.
+                        # update payer balance because he paid money. 
+                        # reduce receiver's amount to receive remaining amount.
                         balances[payer] += amount
                         new_balance -= amount
 
