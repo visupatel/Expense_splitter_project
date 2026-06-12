@@ -49,15 +49,13 @@ class BudgetView(APIView):
             
             category = category.strip().replace(" ","").capitalize()    # convert category in same format for all(ex:    luNCh  FoOD   -->Lunchfood)
 
-            with transaction.atomic():
+            # If category for that group is already present then update only amount and date.
+            """outside default fields are checked with and operators(group and category) if both is already 
+            present then updated default fields only."""
 
-                # If category for that group is already present then update only amount and date.
-                """outside default fields are checked with and operators(group and category) if both is already 
-                present then updated default fields only."""
-
-                Budget.objects.update_or_create(group=group,category=category,defaults={"monthly_budget":amount,"date":date})
-                return Response({"status":"success","message":"Budget created successfully..."},status=status.HTTP_200_OK)
-        
+            Budget.objects.update_or_create(group=group,category=category,defaults={"monthly_budget":amount,"date":date})
+            return Response({"status":"success","message":"Budget created successfully..."},status=status.HTTP_200_OK)
+    
         except ValueError as e:
             if "time data" in str(e):      # ValueError for date format
                 return Response({"status":"failed","message":f"date '{date}' does not match the format 'YYYY-MM-DD'"},status=status.HTTP_400_BAD_REQUEST)
@@ -139,9 +137,8 @@ class BudgetView(APIView):
                 date = datetime.strptime(date,'%Y-%m-%d')
                 budget.date = date
             
-            with transaction.atomic():
-                budget.save()
-                return Response({"status":"success","message":"Budget updated successfully..."},status=status.HTTP_200_OK)
+            budget.save()
+            return Response({"status":"success","message":"Budget updated successfully..."},status=status.HTTP_200_OK)
         
         except ValueError as e:
             if "time data" in str(e):
@@ -170,9 +167,8 @@ class BudgetView(APIView):
             if not is_member:
                 return Response({"status":"failed","message":"You are not access this group becuase you are not the member of this group"},status=status.HTTP_401_UNAUTHORIZED)
 
-            with transaction.atomic():
-                budget.delete()
-                return Response({"status":"success","message":f"'{budget.category}' Budget deleted successfully.."},status=status.HTTP_200_OK)
+            budget.delete()
+            return Response({"status":"success","message":f"'{budget.category}' Budget deleted successfully.."},status=status.HTTP_200_OK)
 
         except ValueError as e:
             return Response({"status":"failed","message":str(e)},status=status.HTTP_400_BAD_REQUEST)

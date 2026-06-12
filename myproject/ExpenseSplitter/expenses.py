@@ -98,6 +98,8 @@ class ExpenseView(APIView):
                     new_img = default_storage.url(save_path)
                     images.append(new_img)
             
+            """Apply changes to connected database tables in a single transaction. Ensure all operaions succeed together.
+            If any operation fails, all changes are rolled back."""
             with transaction.atomic():
                 expense = Expense.objects.create(group=group,item=item,amount_paid=amount,paid_by=user,date=date,receipt=images)
 
@@ -213,16 +215,16 @@ class ExpenseView(APIView):
             if reciept:
                 images = []
                 for img in reciept:
+                    # absolute_url = request.build_absolute_uri(f"reciept_images/{item}/{img}")
                     save_path = default_storage.save(f"reciept_images/{item}/{img}",img)
                     new_img = default_storage.url(save_path)
                     images.append(new_img)
                 expense.receipt = images
 
-            with transaction.atomic():
-                expense.save()
-                
-                self.send_alert(group=expense.group,item=expense.item)
-                return Response({"status":"success","message":"Expense updated successfully..."},status=status.HTTP_200_OK)
+            expense.save()
+            
+            self.send_alert(group=expense.group,item=expense.item)
+            return Response({"status":"success","message":"Expense updated successfully..."},status=status.HTTP_200_OK)
 
         except ValueError as e:
             if "time data" in str(e):

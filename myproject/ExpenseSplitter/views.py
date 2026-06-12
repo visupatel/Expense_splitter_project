@@ -3,7 +3,6 @@ from rest_framework import status
 from rest_framework.response import Response
 from .models import Group,User
 from rest_framework.permissions import IsAuthenticated
-from django.db import transaction
 from rest_framework.views import APIView
 from .validation import isValid_type
 
@@ -22,17 +21,14 @@ class GroupView(APIView):
             if Group.objects.filter(name = group_name).exists():  
                 return Response({"status":"failed","message":f"'{group_name}' already exist, Enter another name"},status=status.HTTP_400_BAD_REQUEST)
 
-            """Apply changes to connected database tables in a single transaction. Ensure all operaions succeed together.
-            If any operation fails, all changes are rolled back."""
-            with transaction.atomic():
-                new_group = Group.objects.create(name = group_name)
-                new_group.members.add(request.user)
-                return Response({
-                    "status":"success",
-                    "message":f"'{group_name}' group created successfully...."
-                },
-                status=status.HTTP_201_CREATED
-                )
+            new_group = Group.objects.create(name = group_name)
+            new_group.members.add(request.user)
+            return Response({
+                "status":"success",
+                "message":f"'{group_name}' group created successfully...."
+            },
+            status=status.HTTP_201_CREATED
+            )
             
         except Exception as e:
             return Response({
@@ -102,9 +98,9 @@ class GroupView(APIView):
                     return Response({"status":"failed","message":f"'{group_name}' already exist please enter another 'group_name'"},status=status.HTTP_400_BAD_REQUEST)
             
                 group.name = group_name
-            with transaction.atomic():
-                group.save()
-                return Response({"status":"success","message":"Group updated successfully..."},status=status.HTTP_200_OK)
+            
+            group.save()
+            return Response({"status":"success","message":"Group updated successfully..."},status=status.HTTP_200_OK)
         
         except ValueError as e:
             return Response({"status":"failed","message":str(e)},status=status.HTTP_400_BAD_REQUEST)
@@ -133,9 +129,8 @@ class GroupView(APIView):
             if not group.members.filter(id = request.user.id).exists():
                 return Response({"status":"failed","message":"You are not access this group becuase you are not the member of this group"},status=status.HTTP_401_UNAUTHORIZED)
             
-            with transaction.atomic():
-                group.delete()
-                return Response({"status":"success","message":"Group deleted successfully..."},status=status.HTTP_200_OK)
+            group.delete()
+            return Response({"status":"success","message":"Group deleted successfully..."},status=status.HTTP_200_OK)
         
         except ValueError as e:
             return Response({"status":"failed","message":str(e)},status=status.HTTP_400_BAD_REQUEST)

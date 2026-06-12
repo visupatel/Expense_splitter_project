@@ -144,9 +144,17 @@ REST_FRAMEWORK = {
 from datetime import timedelta
 
 SIMPLE_JWT= {
-    'ACCESS_TOKEN_LIFETIME':timedelta(minutes=5),
-    'REFRESH_TOKEN_LIFETIME':timedelta(days=7),
+    'ACCESS_TOKEN_LIFETIME':timedelta(days=1),
+    'REFRESH_TOKEN_LIFETIME':timedelta(days=30),
 }
 
 # send email in terminal not actually send the mail to real email id.
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+
+
+
+import os
+
+MEDIA_ROOT = os.path.join(r"C:\Users\01\OneDrive\Documents", 'user_mediafiles')
+
+MEDIA_URL = '/media/'
