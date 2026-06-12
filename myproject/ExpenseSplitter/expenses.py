@@ -215,10 +215,9 @@ class ExpenseView(APIView):
             if reciept:
                 images = []
                 for img in reciept:
-                    # absolute_url = request.build_absolute_uri(f"reciept_images/{item}/{img}")
                     save_path = default_storage.save(f"reciept_images/{item}/{img}",img)
                     new_img = default_storage.url(save_path)
-                    images.append(new_img)
+                    images.append(request.build_absolute_uri(new_img))
                 expense.receipt = images
 
             expense.save()
@@ -267,7 +266,7 @@ class ExpenseView(APIView):
             return Response({"status":"error","message":str(e)},status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-@api_view(['POST','GET'])
+@api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def calculate_group_balances(request):
     try:

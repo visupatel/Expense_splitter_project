@@ -1,6 +1,6 @@
 from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
-from .authentication import *
+from .user_authentication import *
 from .views import *
 from .invitation import *
 from .budget import *

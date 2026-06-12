@@ -7,6 +7,7 @@ class User(AbstractBaseUser):
     username = models.CharField(max_length = 100,unique = True, null = False)
     email = models.EmailField(max_length = 150, unique = True, null = False)
     password = models.CharField(max_length = 128, null = False)
+    token_version = models.IntegerField(default = 0)
     otp = models.CharField(max_length=4,blank=True,null=True)
     otp_exp = models.DateTimeField(blank=True,null=True)
 

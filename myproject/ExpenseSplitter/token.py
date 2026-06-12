@@ -8,6 +8,7 @@ def generate_token(user):
     token['user_id'] = user.id
     token['username'] = user.username
     token['email'] = user.email
+    token["token_version"] = user.token_version
 
     return token
     
