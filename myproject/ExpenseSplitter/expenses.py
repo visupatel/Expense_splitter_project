@@ -10,6 +10,9 @@ from .validation import isValid_type
 from django.utils import timezone
 from django.core.mail import send_mail
 from rest_framework.decorators import api_view,permission_classes
+from django.db.models import Q
+from django.core.paginator import Paginator,EmptyPage
+
 
 
 class ExpenseView(APIView):
@@ -125,18 +128,48 @@ class ExpenseView(APIView):
     def get(self,request):
         try:
             group_id = request.data.get('group_id')
+            search = request.data.get('search')
+            page_number = request.data.get("page_number")
+            page_size = request.data.get('page_size')
+            start_date = request.data.get('start_date')
+            end_date = request.data.get('end_date')
+
             if not group_id:
                 return Response({"status":"failed","message":"'group_id' must be required"},status=status.HTTP_400_BAD_REQUEST)
             
+            if not page_number or not page_size:
+                return Response({"status":"failed","meassage":"'page_number' and 'page_size' must be required"},status=status.HTTP_400_BAD_REQUEST)
+            
+            page_number = isValid_type(int,page_number,"integer","page_number")
+            page_size = isValid_type(int,page_size,"integer","page_size")
             group_id = isValid_type(int,group_id,'integer','group_id')
+
+            if page_number <= 0 or page_size <= 0:
+                return Response({"status":"failed" ,"message":"page and page_size must be greater than 0"},status=status.HTTP_400_BAD_REQUEST)
+            
             group = Group.objects.get(id = group_id)
             expenses = Expense.objects.filter(group = group)
 
             if not group.members.filter(id = request.user.id).exists():
                 return Response({"status":"failed","message":"You can not access this group because you are not the member of this group"},status=status.HTTP_401_UNAUTHORIZED)
 
+            if search:
+                expenses = expenses.filter(Q(item__icontains = search)|Q(amount_paid__icontains = search)|Q(paid_by__username__icontains = search)|Q(skipped_member__id__icontains = search))
+            
+            if start_date and end_date:
+                start_date = datetime.strptime(start_date,"%Y-%m-%d").date()
+                end_date = datetime.strptime(end_date,"%Y-%m-%d").date()
+
+                expenses = expenses.filter(
+                    date__range=[start_date, end_date]
+                )
+
+            paginator = Paginator(expenses,page_size)
+
+            paginator_data = paginator.page(page_number)
+            
             list_expenses = []
-            for expense in expenses:
+            for expense in paginator_data:
                 skipped_members = [val['id'] for val in expense.skipped_member.values("id")]
                 list_expenses.append({
                         "id":expense.id,
@@ -147,20 +180,29 @@ class ExpenseView(APIView):
                         "date":expense.date,
                         "receipt":expense.receipt
                     })
+                
             return Response({
                 "status":"success",
                 "message":"Expense fetched",
+                "total_pages": paginator.num_pages,
+                "current_page": page_number,
+                "total_items": paginator.count,
                 f"{group.name}":list_expenses
                 },
                 status=status.HTTP_200_OK
                 )
         
         except ValueError as e:
+            if "time data" in str(e):
+                return Response({"status":"failed","message": f"date does not match the format 'YYYY-MM-DD'"},status=status.HTTP_400_BAD_REQUEST)
             return Response({"status":"failed","message":str(e)},status=status.HTTP_400_BAD_REQUEST)
                 
         except Group.DoesNotExist:
             return Response({"status":"failed","message":"Group not found"},status=status.HTTP_404_NOT_FOUND)
         
+        except EmptyPage:
+            return Response({"status":"failed" ,"message": "Page not found"},status=status.HTTP_404_NOT_FOUND)
+
         except Exception as e:
             return Response({"status":"error","message":str(e)},status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
