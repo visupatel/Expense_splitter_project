@@ -236,7 +236,7 @@ def reset_password(request):
         if str(otp) != user.otp:        # if otp is not mached.
             return Response({
                 "status":"failed",
-                "message":"Invalid OTP please enter valid OTP"
+                "message":"Invalid OTP or email please enter valid OTP and email"
             },
             status=status.HTTP_400_BAD_REQUEST
             )

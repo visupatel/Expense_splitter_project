@@ -7,6 +7,8 @@ from rest_framework.permissions import IsAuthenticated
 from django.db import transaction
 from rest_framework.views import APIView
 from .validation import isValid_type
+from django.db.models import Q
+from django.core.paginator import Paginator,EmptyPage
 
 
 class BudgetView(APIView):
@@ -35,13 +37,13 @@ class BudgetView(APIView):
             group_id = isValid_type(int,group_id,'integer',"group_id")
             group = Group.objects.get(id = group_id)
             
-            if not group.members.filter(id = request.user.id).exists():    # to check authenticated user is in this group or not.
+            if group.admin != request.user:
                 return Response({
-                "status": "failed",
-                "message": "You cannot manage the budget because you are not a member of this group."
-            }, 
-            status=status.HTTP_401_UNAUTHORIZED
-            )
+                    "status":"failed",
+                    "message":"Only group admin can create the budget"
+                },
+                status=status.HTTP_403_FORBIDDEN
+                )
 
             amount = isValid_type(float,amount,"decimal or integer","budget")
             if amount <= 0:
@@ -71,35 +73,75 @@ class BudgetView(APIView):
   
     def get(self,request):
         try:
-            budget_id = request.data.get('budget_id')
-            if not budget_id:
-                return Response({"status":"failed","message":"'budget_id' must be required"},status=status.HTTP_400_BAD_REQUEST)
+            group_id = request.data.get('group_id')
+            search = request.data.get('search')
+            page_number = request.data.get("page_number")
+            page_size = request.data.get('page_size')
 
-            budget_id = isValid_type(int,budget_id,"integer","budget_id")
+            if not page_number or not page_size:
+                return Response({"status":"failed","meassage":"'page_number' and 'page_size' must be required"},status=status.HTTP_400_BAD_REQUEST)
+            
+            page_number = isValid_type(int,page_number,"integer","page_number")
+            page_size = isValid_type(int,page_size,"integer","page_size")
+            
+            if page_number <= 0 or page_size <= 0:
+                return Response({"status":"failed" ,"message":"page and page_size must be greater than 0"},status=status.HTTP_400_BAD_REQUEST)
 
-            budget = Budget.objects.get(id = budget_id)
-            is_member = budget.group.members.filter(username = request.user.username).exists()
-            if not is_member:
-                return Response({"status":"failed","message":"You are not access this group becuase you are not the member of this group"},status=status.HTTP_401_UNAUTHORIZED)
+            # filtr group members by authenticated user
+            budgets = Budget.objects.filter(group__members = request.user)
+           
+            if group_id:
+                group_id = isValid_type(int,group_id,"integer","group_id")
+                group = Group.objects.get(id = group_id)
+                budgets = budgets.filter(group = group_id)
+            
+            if search:
+                budgets = budgets.filter(Q(category__icontains = search)|Q(group__name__icontains=search))
+            
+            print("group:",budgets)
 
-            return Response({
-                "status":"success",
-                "message":"Budget info fetched....",
-                "data":{
+            paginator = Paginator(budgets,page_size)
+
+            # return a page object of given page number and raise Emptypage error if page has no content
+            paginator_data = paginator.page(page_number)
+
+            budget_list = []
+            for budget in paginator_data:
+                budget_list.append({
                     "id":budget.id,
                     "category":budget.category,
                     "monthly_budget":budget.monthly_budget,
                     "date":budget.date,
-                    },
+                    "group":budget.group.name,
+                })
+
+            return Response({
+                "status":"success",
+                "message":"Budget info fetched....",
+                "data": budget_list
                 },
                 status=status.HTTP_200_OK
                 )
+        
         except ValueError as e:
             return Response({"status":"failed","message":str(e)},status=status.HTTP_400_BAD_REQUEST)
+        
         except Budget.DoesNotExist:
             return Response({'status':"failed","message":"Budget not found"},status=status.HTTP_400_BAD_REQUEST)
+        
+        except Group.DoesNotExist:
+            return Response({'status':"failed","message":"Group not found"},status=status.HTTP_400_BAD_REQUEST)
+        
+        except EmptyPage:
+            return Response({"status":"failed" ,"message": "Page not found"},status=status.HTTP_404_NOT_FOUND)
+
         except Exception as e:
-            return Response({str(e)})
+            return Response({
+                "status":"error",
+                "message":str(e)
+            },
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
     def put(self,request):
         try:
@@ -114,10 +156,14 @@ class BudgetView(APIView):
             budget_id = isValid_type(int,budget_id,'integer',"group_id")
             budget = Budget.objects.get(id = budget_id)
             
-            is_member = budget.group.members.filter(username = request.user.username).exists()
-            if not is_member:
-                return Response({"status":"failed","message":"You are not access this group becuase you are not the member of this group"},status=status.HTTP_401_UNAUTHORIZED)
-            
+            if budget.group.admin != request.user:
+                return Response({
+                    "status":"failed",
+                    "message":"Only group admin can update the budget"
+                },
+                status=status.HTTP_403_FORBIDDEN
+                )
+                        
             if category:
                 category = category.strip().replace(" ","").capitalize()
                 
@@ -163,10 +209,14 @@ class BudgetView(APIView):
             budget_id = isValid_type(int,budget_id,"integer","budget_id")
             budget = Budget.objects.get(id = budget_id)
             
-            is_member = budget.group.members.filter(username = request.user.username).exists()
-            if not is_member:
-                return Response({"status":"failed","message":"You are not access this group becuase you are not the member of this group"},status=status.HTTP_401_UNAUTHORIZED)
-
+            if budget.group.admin != request.user:
+                return Response({
+                    "status":"failed",
+                    "message":"Only group admin can delete the budget"
+                },
+                status=status.HTTP_403_FORBIDDEN
+                )
+            
             budget.delete()
             return Response({"status":"success","message":f"'{budget.category}' Budget deleted successfully.."},status=status.HTTP_200_OK)
 

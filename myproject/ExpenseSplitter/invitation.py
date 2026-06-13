@@ -25,25 +25,23 @@ def send_invitation_link(request):
         
         emails = emails.split(",")
         
-        if not group.members.filter(id = request.user.id).exists():
-            return Response({
-                "status": "failed",
-                "message": f"You cannot invite people to '{group.name}' because you are not a member of this group."
-            }, 
-            status=status.HTTP_401_UNAUTHORIZED
+        if group.admin != request.user:
+            return Response(
+                {
+                    "status":"failed",
+                    "message":"Only group admin can invite the people"
+                },
+                status=status.HTTP_403_FORBIDDEN
             )
     
-        inviter_name = request.user.username    # authorized person usename
-        inviter_mail = request.user.email         # authorized person email
-
         subject = f"Invited to join the '{group.name}' group"
     
         for email in emails:
 
             # create url for invitation
             invitation_link = request.build_absolute_uri(f'/api/invitation_link/{group.id}/{email}/')
-            message = f"Hello Dear,\n\n{inviter_name} invited you to join the '{group.name}' group.To join the group please click on below link.\n{invitation_link}"
-            send_mail(subject=subject,message=message,from_email=inviter_mail,recipient_list=[email],fail_silently=False)    # fail_silently is used to prevent email to fail silently
+            message = f"Hello Dear,\n\n'{group.admin}' invited you to join the '{group.name}' group.To join the group please click on below link.\n{invitation_link}"
+            send_mail(subject=subject,message=message,from_email=group.admin.email,recipient_list=[email],fail_silently=False)    # fail_silently is used to prevent email to fail silently
 
         return Response({
             "status":"success",

@@ -23,7 +23,7 @@ class GroupView(APIView):
             if Group.objects.filter(name = group_name).exists():  
                 return Response({"status":"failed","message":f"'{group_name}' already exist, Enter another name"},status=status.HTTP_400_BAD_REQUEST)
 
-            new_group = Group.objects.create(name = group_name)
+            new_group = Group.objects.create(name = group_name, admin = request.user)
             new_group.members.add(request.user)
             return Response({
                 "status":"success",
@@ -65,7 +65,7 @@ class GroupView(APIView):
                 groups = groups.filter(id = group_id)
 
             if search:
-                groups = groups.filter(Q(name__icontains=search))
+                groups = groups.filter(Q(name__icontains=search)|Q(admin__username__icontains = search))
 
             # set queryset of groups for per page items
             paginator = Paginator(groups,page_size)
@@ -81,6 +81,7 @@ class GroupView(APIView):
                 group_info.append({
                     "group_id":group.id,
                     "group_name":group.name,
+                    "group_admin":group.admin.username,
                     "group_members":group_members,
                 })
            
@@ -123,9 +124,14 @@ class GroupView(APIView):
             group_id = isValid_type(int,group_id,"integer","group_id")
             group = Group.objects.get(id = group_id)
             
-            if not group.members.filter(id = request.user.id).exists():
-                return Response({"status":"failed","message":"You are not access this group becuase you are not the member of this group"},status=status.HTTP_401_UNAUTHORIZED)
-            
+            if group.admin != request.user:
+                return Response({
+                    "status":"failed",
+                    "message":"Only group admin can update the group"
+                },
+                status=status.HTTP_403_FORBIDDEN
+                )  
+                      
             if group_name:
                 if Group.objects.filter(name=group_name).exists():
                     return Response({"status":"failed","message":f"'{group_name}' already exist please enter another 'group_name'"},status=status.HTTP_400_BAD_REQUEST)
@@ -148,7 +154,7 @@ class GroupView(APIView):
             },
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-
+    
     # remove group 
     def delete(self,request):
         try:
@@ -159,9 +165,13 @@ class GroupView(APIView):
             group_id = isValid_type(int,group_id,"integer","group_id")
             group = Group.objects.get(id = group_id)
             
-            if not group.members.filter(id = request.user.id).exists():
-                return Response({"status":"failed","message":"You are not access this group becuase you are not the member of this group"},status=status.HTTP_401_UNAUTHORIZED)
-            
+            if group.admin != request.user:
+                return Response({
+                    "status":"failed",
+                    "message":"Only group admin can delete the group"
+                },
+                status=status.HTTP_403_FORBIDDEN
+                )            
             group.delete()
             return Response({"status":"success","message":"Group deleted successfully..."},status=status.HTTP_200_OK)
         
@@ -181,6 +191,64 @@ class GroupView(APIView):
 
 
 
+# tranfer admin role if admin wants to leave the group
+@api_view(['PUT'])
+@permission_classes([IsAuthenticated])
+def transfer_admin(request):
+    try:
+        group_id = request.data.get('group_id')
+        email = request.data.get('email')
+
+        if not group_id or not email:
+            return Response({
+                "status":"failed",
+                "message":"'group_id' and 'email' are required"
+            },
+            status=status.HTTP_400_BAD_REQUEST
+            )
+
+        group = Group.objects.get(id=group_id)
+
+        # Only admin can transfer role
+        if group.admin != request.user:
+            return Response({
+                "status":"failed",
+                "message":"Only admin can transfer admin role",
+            },
+            status=status.HTTP_403_FORBIDDEN
+            )
+
+        new_admin = group.members.get(email=email)
+
+        group.admin = new_admin
+        group.save()
+
+        return Response(
+            {
+                "status":"success",
+                "message":f"Admin role transferred to {new_admin.username}"
+            },
+            status=status.HTTP_200_OK
+        )
+
+    except Group.DoesNotExist:
+        return Response(
+            {
+                "status":"failed",
+                "message":"Group not found"
+            },
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    except User.DoesNotExist:
+        return Response(
+            {
+                "status":"failed",
+                "message":"User is not a member of this group"
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
 # Member wants to exit from the group
 @api_view(['DELETE'])
 @permission_classes([IsAuthenticated])
@@ -197,21 +265,46 @@ def exit_group(request):
         
         group_id = isValid_type(int,group_id,"integer","group_id")
         group = Group.objects.get(id = group_id)
-        
+
         if not group.members.filter(id = request.user.id).exists():
-            return Response({"status":"failed","message":"You are not access this group becuase you are not the member of this group"},status=status.HTTP_401_UNAUTHORIZED)
+            return Response({"status":"failed","message":"You are not access this group becuase you are not the member of this group"},status=status.HTTP_403_FORBIDDEN)
 
         member = group.members.get(email = email)
-        group.members.remove(member)      # remove member from the group
-
-        user = User.objects.get(email=email)
 
         # to check member is exit by it self or removed by any group member.
-        if request.user.email == email:  
-            return Response({"status":"success","message":f"'{user.username}' exit from '{group.name}' group"},status=status.HTTP_200_OK)
-        else:
-            return Response({"status":"success","message":f"'{user.username}' remove by '{request.user}'"},status=status.HTTP_200_OK)
+        if request.user.email == email: 
             
+            # before leave the group, group admin assign role to other member
+            if group.admin == request.user:
+                return Response({
+                    "status":"failed",
+                    "message":"Group admin cannot leave the group. Transfer admin role first."
+                },
+                status=status.HTTP_400_BAD_REQUEST
+                )
+            group.members.remove(member)      # remove member from the group
+            user = User.objects.get(email=email) 
+            return Response({"status":"success","message":f"'{user.username}' exit from '{group.name}' group"},status=status.HTTP_200_OK)
+        
+        # User is trying to remove another member
+        else:
+            if group.admin != request.user:
+                return Response({
+                    "status":"failed",
+                    "message":"Only admin can remove members"
+                },
+                status=status.HTTP_403_FORBIDDEN
+                )
+
+            group.members.remove(member)
+
+            return Response({
+                "status":"success",
+                "message":f"'{member.username}' removed by {group.admin}"
+            },
+            status=status.HTTP_200_OK
+            )
+                    
     except ValueError as e:
         return Response({"status":"failed","message":str(e)},status=status.HTTP_400_BAD_REQUEST)
     except Group.DoesNotExist:

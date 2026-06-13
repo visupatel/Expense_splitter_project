@@ -72,11 +72,11 @@ class ExpenseView(APIView):
             user = User.objects.get(id = paid_by)
             
             if not group.members.filter(id = request.user.id).exists():
-                return Response({"status":"failed","message":"You are not access this group because you are not the member of this group"},status=status.HTTP_401_UNAUTHORIZED)
+                return Response({"status":"failed","message":"You are not access this group because you are not the member of this group"},status=status.HTTP_403_FORBIDDEN)
 
             # if who paid the amount is not a group member.
             if not group.members.filter(id = paid_by).exists():
-                return Response({"status":"failed","message":f"{user.username} is not a member of this group"},status=status.HTTP_400_BAD_REQUEST)
+                return Response({"status":"failed","message":f"{user.username} is not a member of this group"},status=status.HTTP_403_FORBIDDEN)
 
             members = []
             if skipped_member:
@@ -104,7 +104,7 @@ class ExpenseView(APIView):
             """Apply changes to connected database tables in a single transaction. Ensure all operaions succeed together.
             If any operation fails, all changes are rolled back."""
             with transaction.atomic():
-                expense = Expense.objects.create(group=group,item=item,amount_paid=amount,paid_by=user,date=date,receipt=images)
+                expense = Expense.objects.create(group=group,item=item,amount_paid=amount,paid_by=user,created_by = request.user, date=date,receipt=images)
 
                 # set skipped member for this expense(set --> add member and remove existing one).
                 expense.skipped_member.set(members)     
@@ -151,7 +151,7 @@ class ExpenseView(APIView):
             expenses = Expense.objects.filter(group = group)
 
             if not group.members.filter(id = request.user.id).exists():
-                return Response({"status":"failed","message":"You can not access this group because you are not the member of this group"},status=status.HTTP_401_UNAUTHORIZED)
+                return Response({"status":"failed","message":"You can not access this group because you are not the member of this group"},status=status.HTTP_403_FORBIDDEN)
 
             if search:
                 expenses = expenses.filter(Q(item__icontains = search)|Q(amount_paid__icontains = search)|Q(paid_by__username__icontains = search)|Q(skipped_member__id__icontains = search))
@@ -178,7 +178,11 @@ class ExpenseView(APIView):
                         "paid_by":expense.paid_by.username,
                         "skipped_members":skipped_members,
                         "date":expense.date,
-                        "receipt":expense.receipt
+                        "created_by":expense.created_by,
+                        "updated_by":expense.updated_by,
+                        "created_at":expense.created_at,
+                        "updated_at":expense.updated_at,
+                        "receipt":expense.receipt,
                     })
                 
             return Response({
@@ -262,6 +266,7 @@ class ExpenseView(APIView):
                     images.append(request.build_absolute_uri(new_img))
                 expense.receipt = images
 
+            expense.updated_by = request.user
             expense.save()
             
             self.send_alert(group=expense.group,item=expense.item)
@@ -389,7 +394,11 @@ def calculate_group_balances(request):
                         # use abs to convert (-) to (+) because(min(-500,200) = 500 which is wrong)
                         amount = min(abs(payer_balance), new_balance)
                         amount = round(amount,2)
-                        result.append(f"'{payer}' need to pay {amount} to '{user}'")
+                        result.append({
+                            "from":payer,
+                            "to":user,
+                            "amount":amount
+                            })
                 
                         payer_user = User.objects.get(username=payer)
                         receiver_user = User.objects.get(username=user)

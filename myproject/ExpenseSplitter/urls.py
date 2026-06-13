@@ -17,6 +17,7 @@ urlpatterns = [
     path('invite/members/',send_invitation_link),
     path('invitation_link/<int:group_id>/<str:email>/',join_group),
     path('exit_group/',exit_group),
+    path("transfer_role/",transfer_admin),
     path('manage_budget/',BudgetView.as_view()),
     path('add_expenses/',ExpenseView.as_view()),
     path('calculate_balance/',calculate_group_balances),
