@@ -5,6 +5,8 @@ from .models import Group,User
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from .validation import isValid_type
+from django.db.models import Q
+from django.core.paginator import Paginator,EmptyPage
 
 class GroupView(APIView):
     permission_classes = [IsAuthenticated]
@@ -42,26 +44,54 @@ class GroupView(APIView):
     def get(self,request):
         try:
             group_id = request.data.get('group_id')
-            if not group_id:
-                return Response({"status":"failed","message":"'group_id' must be required"},status=status.HTTP_400_BAD_REQUEST)
+            search = request.data.get('search')
+            page_number = request.data.get("page_number")
+            page_size = request.data.get('page_size')
+
+            if not page_number or not page_size:
+                return Response({"status":"failed","meassage":"'page_number' and 'page_size' must be required"},status=status.HTTP_400_BAD_REQUEST)
             
-            group_id = isValid_type(int,group_id,"integer","group_id")
-            group = Group.objects.get(id = group_id)
+            page_number = isValid_type(int,page_number,"integer","page_number")
+            page_size = isValid_type(int,page_size,"integer","page_size")
             
-            if not group.members.filter(id = request.user.id).exists():
-                return Response({"status":"failed","message":"You are not access this group becuase you are not the member of this group"},status=status.HTTP_401_UNAUTHORIZED)
-            
-            # return values of members
-            group_members =  group.members.values("id","username","email")
+            if page_number <= 0 or page_size <= 0:
+                return Response({"status":"failed" ,"message":"page and page_size must be greater than 0"},status=status.HTTP_400_BAD_REQUEST)
+
+            # filtr group members by authenticated user
+            groups = Group.objects.filter(members = request.user)
+           
+            if group_id:
+                group_id = isValid_type(int,group_id,"integer","group_id")
+                groups = groups.filter(id = group_id)
+
+            if search:
+                groups = groups.filter(Q(name__icontains=search))
+
+            # set queryset of groups for per page items
+            paginator = Paginator(groups,page_size)
+
+            # return a page object of given page number and raise Emptypage error if page has no content
+            paginator_data = paginator.page(page_number)
+        
+            group_info = []
+            for group in paginator_data:
+
+                # return values of members
+                group_members =  group.members.values("id","username","email")
+                group_info.append({
+                    "group_id":group.id,
+                    "group_name":group.name,
+                    "group_members":group_members,
+                })
            
             return Response({
                 "status":"success",
                 "message":"Group Info Fetched...",
-                "data":{
-                    "group_id":group.id,
-                    "group_name":group.name,
-                    "group_members":group_members,
-                }
+                "total_pages": paginator.num_pages,
+                "current_page": page_number,
+                "total_items": paginator.count,
+                "group_info":group_info,
+                
             },
             status=status.HTTP_200_OK
             )
@@ -71,6 +101,9 @@ class GroupView(APIView):
         except Group.DoesNotExist:
             return Response({"status":"failed","message":"Group not found"},status=status.HTTP_404_NOT_FOUND)
         
+        except EmptyPage:
+            return Response({"status":"failed" ,"message": "Page not found"},status=status.HTTP_404_NOT_FOUND)
+
         except Exception as e:
             return Response({
                 "status":"error",
