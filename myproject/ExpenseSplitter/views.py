@@ -223,30 +223,35 @@ def transfer_admin(request):
         group.admin = new_admin
         group.save()
 
-        return Response(
-            {
-                "status":"success",
-                "message":f"Admin role transferred to {new_admin.username}"
-            },
-            status=status.HTTP_200_OK
+        return Response({
+            "status":"success",
+            "message":f"Admin role transferred to {new_admin.username}"
+        },
+        status=status.HTTP_200_OK
         )
 
     except Group.DoesNotExist:
-        return Response(
-            {
-                "status":"failed",
-                "message":"Group not found"
-            },
-            status=status.HTTP_404_NOT_FOUND
+        return Response({
+            "status":"failed",
+            "message":"Group not found"
+        },
+        status=status.HTTP_404_NOT_FOUND
         )
 
     except User.DoesNotExist:
-        return Response(
-            {
-                "status":"failed",
-                "message":"User is not a member of this group"
-            },
-            status=status.HTTP_400_BAD_REQUEST
+        return Response({
+            "status":"failed",
+            "message":"User is not a member of this group"
+        },
+        status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    except Exception as e:
+        return Response({
+            "status":"error",
+            "message":str(e)
+        },
+        status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
 # Member wants to exit from the group

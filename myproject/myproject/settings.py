@@ -148,9 +148,18 @@ SIMPLE_JWT= {
     'REFRESH_TOKEN_LIFETIME':timedelta(days=30),
 }
 
-# send email in terminal not actually send the mail to real email id.
-EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+# send email 
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_USE_SSL = False
 
+# authenticating Gmail account
+EMAIL_HOST_USER = 'patelvisu794@gmail.com'
+
+# app password
+EMAIL_HOST_PASSWORD = 'ybcc wbug tmpi kagn'
 
 
 import os

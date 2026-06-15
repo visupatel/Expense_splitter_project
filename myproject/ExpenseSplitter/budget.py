@@ -97,8 +97,6 @@ class BudgetView(APIView):
             
             if search:
                 budgets = budgets.filter(Q(category__icontains = search)|Q(group__name__icontains=search))
-            
-            print("group:",budgets)
 
             paginator = Paginator(budgets,page_size)
 

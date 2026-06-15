@@ -12,7 +12,9 @@ from django.core.mail import send_mail
 from rest_framework.decorators import api_view,permission_classes
 from django.db.models import Q
 from django.core.paginator import Paginator,EmptyPage
-
+from django.conf import settings
+from .email_format import budget_alert_email
+from django.utils.html import strip_tags
 
 
 class ExpenseView(APIView):
@@ -36,10 +38,21 @@ class ExpenseView(APIView):
             # if sum of expenses is higher then monthly budget then send mail to all the group members
             if sum >= budget.monthly_budget:
                 member_emails = [email['email'] for email in group.members.values("email")]
+                
                 for email in member_emails:
                     subject = "Alert Message"
-                    message = f"Alert, Budget out of limit.\nYour limit for {budget.category} = {budget.monthly_budget} but now your total amount for {item} = {sum} "
-                    send_mail(subject,message,from_email="expense_system@gmail.com",recipient_list=[email],fail_silently=False)
+                    
+                    html_message = budget_alert_email(group,budget.category,budget.monthly_budget,sum)
+                    message = strip_tags(html_message)
+
+                    send_mail(
+                        subject,
+                        message,
+                        from_email=settings.EMAIL_HOST_USER,
+                        recipient_list=[email],
+                        html_message=html_message,
+                        fail_silently=False
+                        )
 
     def post(self,request):
         try:
@@ -76,7 +89,7 @@ class ExpenseView(APIView):
 
             # if who paid the amount is not a group member.
             if not group.members.filter(id = paid_by).exists():
-                return Response({"status":"failed","message":f"{user.username} is not a member of this group"},status=status.HTTP_403_FORBIDDEN)
+                return Response({"status":"failed","message":f"For 'paid_by' {user.username} is not a member of this group"},status=status.HTTP_403_FORBIDDEN)
 
             members = []
             if skipped_member:
@@ -84,7 +97,7 @@ class ExpenseView(APIView):
 
                     # if skipped member is not a group member.
                     if not group.members.filter(id = member).exists():
-                        return Response({"status":"failed","message":f"{member} is not a member of this group"},status=status.HTTP_400_BAD_REQUEST)
+                        return Response({"status":"failed","message":f"{member} is not a member of this group for 'skipped_members"},status=status.HTTP_400_BAD_REQUEST)
                     
                     skipped = User.objects.get(id = member)
                     members.append(skipped)
@@ -97,6 +110,7 @@ class ExpenseView(APIView):
             images = []
             if receipt:
                 for img in receipt:
+                    
                     save_path = default_storage.save(f"reciept_images/{item}/{img}",img)
                     new_img = default_storage.url(save_path)
                     images.append(new_img)
@@ -154,7 +168,7 @@ class ExpenseView(APIView):
                 return Response({"status":"failed","message":"You can not access this group because you are not the member of this group"},status=status.HTTP_403_FORBIDDEN)
 
             if search:
-                expenses = expenses.filter(Q(item__icontains = search)|Q(amount_paid__icontains = search)|Q(paid_by__username__icontains = search)|Q(skipped_member__id__icontains = search))
+                expenses = expenses.filter(Q(item__icontains = search)|Q(amount_paid__icontains = search)|Q(paid_by__username__icontains = search)|Q(skipped_member__id__icontains = search)|Q(created_by__username__icontains=search))
             
             if start_date and end_date:
                 start_date = datetime.strptime(start_date,"%Y-%m-%d").date()
@@ -171,6 +185,10 @@ class ExpenseView(APIView):
             list_expenses = []
             for expense in paginator_data:
                 skipped_members = [val['id'] for val in expense.skipped_member.values("id")]
+                updated_by = None
+                if expense.updated_by is not None:
+                    updated_by = expense.updated_by.username
+
                 list_expenses.append({
                         "id":expense.id,
                         "item":expense.item,
@@ -178,8 +196,8 @@ class ExpenseView(APIView):
                         "paid_by":expense.paid_by.username,
                         "skipped_members":skipped_members,
                         "date":expense.date,
-                        "created_by":expense.created_by,
-                        "updated_by":expense.updated_by,
+                        "created_by":expense.created_by.username,
+                        "updated_by":updated_by,
                         "created_at":expense.created_at,
                         "updated_at":expense.updated_at,
                         "receipt":expense.receipt,
@@ -226,13 +244,13 @@ class ExpenseView(APIView):
             expense_id = isValid_type(int,expense_id,"integer","expese_id")
             expense = Expense.objects.get(id = expense_id)
 
-            print("expense:",expense)
             if not expense.group.members.filter(id = request.user.id).exists():
                 return Response({"status":"failed","message":"You can not access this group because you are not the member of this group"},status=status.HTTP_401_UNAUTHORIZED)
 
             if item:
                 item = item.strip().replace(" ","").capitalize()
                 expense.item = item
+                expense.save()
 
             if amount:
                 amount = isValid_type(float,amount,"decimal or integer","total_amount")
@@ -261,7 +279,7 @@ class ExpenseView(APIView):
             if reciept:
                 images = []
                 for img in reciept:
-                    save_path = default_storage.save(f"reciept_images/{item}/{img}",img)
+                    save_path = default_storage.save(f"reciept_images/{expense.item}/{img}",img)
                     new_img = default_storage.url(save_path)
                     images.append(request.build_absolute_uri(new_img))
                 expense.receipt = images
@@ -377,7 +395,6 @@ def calculate_group_balances(request):
             # if balance (-) this member need to pay to other.)
             balances[username] = round(total_paid[username] - total_share[username],2)
 
-        print("balance:",balances)
         result = []
         for user,balance in balances.items():
 

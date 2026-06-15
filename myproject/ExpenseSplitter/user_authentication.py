@@ -10,6 +10,11 @@ from django.contrib.auth.models import update_last_login
 from django.contrib.auth.hashers import make_password,check_password
 from .token import generate_token,generate_otp
 from .validation import isValid_email
+from django.core.mail import send_mail
+from django.conf import settings
+from .email_format import otp_email
+from django.utils.html import strip_tags
+
 
 # register
 @api_view(['POST'])
@@ -17,8 +22,14 @@ from .validation import isValid_email
 def userregister(request):
     try:
         username = request.data.get('username')
-        email = request.data.get('email')
         password = request.data.get('password')
+        email = request.GET.get('email')      # get email directly from the url
+
+        # first check url email
+        if not email:
+            email = request.data.get('email')
+
+        group_id = request.GET.get('group_id')     # to get group_id directly from the url parameter
         
         if not username or not password:
             return Response({
@@ -50,7 +61,7 @@ def userregister(request):
                 "status":"failed",
                 "message":f"username '{username}' is already exist please enter another 'username'"
             },
-            status=status.HTTP_208_ALREADY_REPORTED
+            status=status.HTTP_400_BAD_REQUEST
             )
         
         email = email.lower()     # convert email in lowecase
@@ -60,16 +71,14 @@ def userregister(request):
                 "status":"failed",
                 "message":f"email '{email}' is already exist please enter another 'email'"
             },
-            status=status.HTTP_208_ALREADY_REPORTED
+            status=status.HTTP_400_BAD_REQUEST
             )
         
         #Turn a plain-text password into a hash for database storage
         hashed_password = make_password(password)     
 
         user = User.objects.create(username=username,password=hashed_password,email=email)
-        token = generate_token(user)        #generate token(token.py)
 
-        group_id = request.GET.get('group_id')     # to get group_id directly from the url parameter
         message = f"User '{username}' registered successfully..."
         
         if group_id:
@@ -80,8 +89,6 @@ def userregister(request):
         return Response({
             "status":"success",
             "message":message,
-            "refresh":str(token),
-            "access":str(token.access_token)      # convert refresh token to access token
         },
         status=status.HTTP_201_CREATED
         )
@@ -139,12 +146,13 @@ def userlogin(request):
         user.token_version += 1
         user.save()
 
+        # genrate token(token.py)
         token = generate_token(user)
         return Response({
             "status":"success",
             "message":f"User {username} loggin successfully....",
             "refresh":str(token),
-            "access":str(token.access_token),
+            "access":str(token.access_token),      # convert refresh token into access token
         },
         status=status.HTTP_200_OK
         )
@@ -175,11 +183,23 @@ def forgot_password(request):
         user = User.objects.get(email=email)
 
         user = generate_otp(user)      # generate otp(token.py)
+        subject = f"{timezone.now().date()} - Forgot Password Validate OTP"
+        html_message = otp_email(user,user.otp)
+
+        message = strip_tags(html_message)
+       
+        # send otp email to the user 
+        send_mail(
+            subject,
+            message,
+            from_email=settings.EMAIL_HOST_USER,
+            recipient_list=[email],
+            html_message=html_message,
+            fail_silently=False)
+        
         return Response({
             "status":"success",
-            "message":"OTP generated..",
-            "OTP":user.otp,
-            "Expired_in":"10 minutes"
+            "message":"OTP send successfully..",
         })
     
     except User.DoesNotExist:
@@ -246,7 +266,7 @@ def reset_password(request):
                 "status":"failed",
                 "message":"OTP expired.."
             },
-            status=status.HTTP_408_REQUEST_TIMEOUT
+            status=status.HTTP_400_BAD_REQUEST
             )
         
         user.password = make_password(new_password)
@@ -257,7 +277,7 @@ def reset_password(request):
             "status":"success",
             "message":"password reset successfully"
         },
-        status=status.HTTP_205_RESET_CONTENT
+        status=status.HTTP_200_OK
         )
     
     except User.DoesNotExist:

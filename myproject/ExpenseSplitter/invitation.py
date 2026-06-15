@@ -5,6 +5,9 @@ from .models import Group,User
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from django.core.mail import send_mail
 from .validation import isValid_type
+from django.conf import settings
+from .email_format import invitation_email
+from django.utils.html import strip_tags
 
 
 @api_view(['POST'])
@@ -19,7 +22,7 @@ def send_invitation_link(request):
            
         if not emails:
             return Response({"status":"failed","message":"'emails' must be required"},status=status.HTTP_400_BAD_REQUEST)
-       
+    
         group_id = isValid_type(int,group_id,"integer","group_id")
         group = Group.objects.get(id = group_id)
         
@@ -40,9 +43,21 @@ def send_invitation_link(request):
 
             # create url for invitation
             invitation_link = request.build_absolute_uri(f'/api/invitation_link/{group.id}/{email}/')
-            message = f"Hello Dear,\n\n'{group.admin}' invited you to join the '{group.name}' group.To join the group please click on below link.\n{invitation_link}"
-            send_mail(subject=subject,message=message,from_email=group.admin.email,recipient_list=[email],fail_silently=False)    # fail_silently is used to prevent email to fail silently
+            html_message = invitation_email(group, group.admin.username, invitation_link)
+            
+            # Remove all html tags and return plain text.
+            message = strip_tags(html_message)     
 
+            send_mail(
+                subject=subject,
+                message=message,      # If html not suppoted or for backup
+                from_email=settings.EMAIL_HOST_USER,
+                recipient_list=[email],
+                html_message=html_message,
+                fail_silently=False        # fail_silently is used to prevent email to fail silently
+            )
+
+            
         return Response({
             "status":"success",
             "message":"Send invitation mail successfully...",
@@ -90,7 +105,7 @@ def join_group(request,group_id,email):
                 "status":"failed",
                 "message":f"User already in {group.name}"
             },
-            status=status.HTTP_208_ALREADY_REPORTED
+            status=status.HTTP_400_BAD_REQUEST
             )
         
         # if user is already rgistered in the app then add directly
@@ -101,12 +116,12 @@ def join_group(request,group_id,email):
             "status":"success",
             "message":f"Welcome! You are joined in '{group.name}' group. Now you are the member of '{group.name}'"
         },
-        status=status.HTTP_202_ACCEPTED
+        status=status.HTTP_200_OK
         )
     
     # if user is not registered in the app then send link for registration.
     except User.DoesNotExist:
-        link = request.build_absolute_uri(f'/api/register/?group_id={group.id}')
+        link = request.build_absolute_uri(f'/api/register/?group_id={group.id}&email={email}')
         return Response({
             "status":"success",
             "message":f"May be you don't register yet. Please register via below link.\nregister_link:{link}"
@@ -129,4 +144,9 @@ def join_group(request,group_id,email):
         },
         status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+
+
+
+
+
 
