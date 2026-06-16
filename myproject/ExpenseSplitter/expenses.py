@@ -113,7 +113,7 @@ class ExpenseView(APIView):
                     
                     save_path = default_storage.save(f"reciept_images/{item}/{img}",img)
                     new_img = default_storage.url(save_path)
-                    images.append(new_img)
+                    images.append(request.build_absolute_uri(new_img))
             
             """Apply changes to connected database tables in a single transaction. Ensure all operaions succeed together.
             If any operation fails, all changes are rolled back."""
@@ -179,14 +179,14 @@ class ExpenseView(APIView):
 
             paginator_data = paginator.page(page_number)
         
-            list_expenses = []
+            group_expenses = {}
             for expense in paginator_data:
                 skipped_members = [val['id'] for val in expense.skipped_member.values("id")]
                 updated_by = None
                 if expense.updated_by is not None:
                     updated_by = expense.updated_by.username
 
-                list_expenses.append({
+                expenses_data = {
                         "id":expense.id,
                         "item":expense.item,
                         "total_amount":expense.amount_paid,
@@ -198,16 +198,20 @@ class ExpenseView(APIView):
                         "created_at":expense.created_at,
                         "updated_at":expense.updated_at,
                         "receipt":expense.receipt,
-                        "group":expense.group.name,
-                    })
+                    }
                 
+                if expense.group.name not in group_expenses:
+                    group_expenses[expense.group.name] = []
+
+                group_expenses[expense.group.name].append(expenses_data)
+                            
             return Response({
                 "status":"success",
                 "message":"Expense fetched",
                 "total_pages": paginator.num_pages,
                 "current_page": page_number,
                 "total_items": paginator.count,
-                "Expenses":list_expenses
+                "Expenses":group_expenses
                 },
                 status=status.HTTP_200_OK
                 )
@@ -392,7 +396,7 @@ def calculate_group_balances(request):
             # if balance is (+) then other member pays to this memebr, 
             # if balance (-) this member need to pay to other.)
             balances[username] = round(total_paid[username] - total_share[username],2)
-
+    
         result = []
         for user,balance in balances.items():
 
@@ -412,7 +416,7 @@ def calculate_group_balances(request):
                         result.append({
                             "from":payer,
                             "to":user,
-                            "amount":amount
+                            "amount":f"{amount} Rupees."
                             })
                 
                         payer_user = User.objects.get(username=payer)
@@ -465,7 +469,7 @@ def calculate_expense(request):
 
         if category:
             category = category.strip().replace(" ","").capitalize()
-            expenses = Expense.objects.filter(item = category)
+            expenses = expenses.filter(item__icontains = category)
 
         if start_date and end_date:
             start_date = datetime.strptime(start_date,"%Y-%m-%d").date()
