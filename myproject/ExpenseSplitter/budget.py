@@ -4,7 +4,6 @@ from rest_framework import status
 from rest_framework.response import Response
 from .models import Group,Budget
 from rest_framework.permissions import IsAuthenticated
-from django.db import transaction
 from rest_framework.views import APIView
 from .validation import isValid_type
 from django.db.models import Q
@@ -93,7 +92,7 @@ class BudgetView(APIView):
             if group_id:
                 group_id = isValid_type(int,group_id,"integer","group_id")
                 group = Group.objects.get(id = group_id)
-                budgets = budgets.filter(group = group_id)
+                budgets = budgets.filter(group = group)
             
             if search:
                 budgets = budgets.filter(Q(category__icontains = search)|Q(group__name__icontains=search))
@@ -123,12 +122,9 @@ class BudgetView(APIView):
         
         except ValueError as e:
             return Response({"status":"failed","message":str(e)},status=status.HTTP_400_BAD_REQUEST)
-        
-        except Budget.DoesNotExist:
-            return Response({'status':"failed","message":"Budget not found"},status=status.HTTP_400_BAD_REQUEST)
-        
+                
         except Group.DoesNotExist:
-            return Response({'status':"failed","message":"Group not found"},status=status.HTTP_400_BAD_REQUEST)
+            return Response({'status':"failed","message":"Group not found"},status=status.HTTP_404_NOT_FOUND)
         
         except EmptyPage:
             return Response({"status":"failed" ,"message": "Page not found"},status=status.HTTP_404_NOT_FOUND)
@@ -187,13 +183,10 @@ class BudgetView(APIView):
         except ValueError as e:
             if "time data" in str(e):
                 return Response({"status":"failed","message":f"date '{date}' does not match the format 'YYYY-MM-DD'"},status=status.HTTP_400_BAD_REQUEST)
-
             return Response({"status":"failed","message":str(e)},status=status.HTTP_400_BAD_REQUEST)
         
-        except Group.DoesNotExist:
-            return Response({'status':"failed","message":"Group not found"},status=status.HTTP_400_BAD_REQUEST)
         except Budget.DoesNotExist:
-            return Response({'status':"failed","message":"Budget not found"},status=status.HTTP_400_BAD_REQUEST)
+            return Response({'status':"failed","message":"Budget not found"},status=status.HTTP_404_NOT_FOUND)
         
         except Exception as e:
             return Response({"status":"error","message":str(e)},status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -221,6 +214,6 @@ class BudgetView(APIView):
         except ValueError as e:
             return Response({"status":"failed","message":str(e)},status=status.HTTP_400_BAD_REQUEST)
         except Budget.DoesNotExist:
-            return Response({'status':"failed","message":"Budget not found"},status=status.HTTP_400_BAD_REQUEST)
+            return Response({'status':"failed","message":"Budget not found"},status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             return Response({"status":"error","message":str(e)},status=status.HTTP_500_INTERNAL_SERVER_ERROR)
