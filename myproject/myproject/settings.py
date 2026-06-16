@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
 from pathlib import Path
+from decouple import config
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -20,7 +21,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-(poh$!6k+h$jsm63_9r&1#mo_fn(^4@c35t(1jh86(mx!%74xp'
+SECRET_KEY = config('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
@@ -76,23 +77,17 @@ WSGI_APPLICATION = 'myproject.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.sqlite3',
-#         'NAME': BASE_DIR / 'db.sqlite3',
-#     }
-# }
 
 
 # connect with postgresql
 DATABASES = {
     'default':{
-        'ENGINE':'django.db.backends.postgresql',
-        'NAME':'Split_Expense',
-        'USER':'postgres',
-        'PASSWORD':'Visu@0310',
-        'HOST':'localhost',
-        'PORT':'5432',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': config('DB_NAME'),
+        'USER': config('DB_USER'),
+        'PASSWORD': config('DB_PASSWORD'),
+        'HOST': config('DB_HOST'),
+        'PORT': config('DB_PORT'),
     }
 }
 
@@ -156,10 +151,10 @@ EMAIL_USE_TLS = True
 EMAIL_USE_SSL = False
 
 # authenticating Gmail account
-EMAIL_HOST_USER = 'patelvisu794@gmail.com'
+EMAIL_HOST_USER = config('EMAIL_HOST_USER')
 
 # app password
-EMAIL_HOST_PASSWORD = 'ybcc wbug tmpi kagn'
+EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD')
 
 
 import os
