@@ -97,7 +97,7 @@ class ExpenseView(APIView):
 
                     # if skipped member is not a group member.
                     if not group.members.filter(id = member).exists():
-                        return Response({"status":"failed","message":f"{member} is not a member of this group for 'skipped_members"},status=status.HTTP_400_BAD_REQUEST)
+                        return Response({"status":"failed","message":f"{member} is not a member of this group for 'skipped_members"},status=status.HTTP_403_FORBIDDEN)
                     
                     skipped = User.objects.get(id = member)
                     members.append(skipped)
@@ -132,9 +132,9 @@ class ExpenseView(APIView):
             return Response({"status":"failed","message":str(e)},status=status.HTTP_400_BAD_REQUEST)
         
         except Group.DoesNotExist:
-            return Response({'status':"failed","message":"Group not found"},status=status.HTTP_400_BAD_REQUEST)
+            return Response({'status':"failed","message":"Group not found"},status=status.HTTP_404_NOT_FOUND)
         except User.DoesNotExist:
-            return Response({'status':"failed","message":"User not found"},status=status.HTTP_400_BAD_REQUEST)
+            return Response({'status':"failed","message":"User not found"},status=status.HTTP_404_NOT_FOUND)
         
         except Exception as e:
             return Response({"status":"error","message":str(e)},status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -248,7 +248,7 @@ class ExpenseView(APIView):
             expense = Expense.objects.get(id = expense_id)
 
             if not expense.group.members.filter(id = request.user.id).exists():
-                return Response({"status":"failed","message":"You can not access this group because you are not the member of this group"},status=status.HTTP_401_UNAUTHORIZED)
+                return Response({"status":"failed","message":"You can not access this group because you are not the member of this group"},status=status.HTTP_403_FORBIDDEN)
 
             if item:
                 item = item.strip().replace(" ","").capitalize()
@@ -261,7 +261,7 @@ class ExpenseView(APIView):
             
             if paid_by:
                 if not expense.group.members.filter(id = paid_by).exists():
-                    return Response({"status":"failed","message":f"{paid_by} is not a member of this group"},status=status.HTTP_400_BAD_REQUEST)
+                    return Response({"status":"failed","message":f"{paid_by} is not a member of this group"},status=status.HTTP_403_FORBIDDEN)
                 user = expense.group.members.get(id = paid_by)
                 expense.paid_by = user
 
@@ -269,7 +269,7 @@ class ExpenseView(APIView):
                 members = []
                 for member in skipped_member.split(","):
                     if not expense.group.members.filter(id = member).exists():
-                        return Response({"status":"failed","message":f"{member} is not a member of this group"},status=status.HTTP_400_BAD_REQUEST)
+                        return Response({"status":"failed","message":f"{member} is not a member of this group"},status=status.HTTP_403_FORBIDDEN)
                     
                     skipped = User.objects.get(id = member)
                     members.append(skipped)
@@ -308,13 +308,13 @@ class ExpenseView(APIView):
         try:
             expense_id = request.data.get('expense_id')
             if not expense_id:
-                return Response({"status":"failed","message":"'expense_id' must be required"})
+                return Response({"status":"failed","message":"'expense_id' must be required"},status=status.HTTP_400_BAD_REQUEST)
             
             expense_id = isValid_type(int,expense_id,'integer','expense_id')
             expense = Expense.objects.get(id = expense_id)
             
             if not expense.group.members.filter(id = request.user.id).exists():
-                return Response({"status":"failed","message":"You can not access this group because you are not the member of this group"})
+                return Response({"status":"failed","message":"You can not access this group because you are not the member of this group"},status=status.HTTP_403_FORBIDDEN)
             
             expense.delete()
             return Response({
@@ -328,7 +328,7 @@ class ExpenseView(APIView):
             return Response({"status":"failed","message":str(e)},status=status.HTTP_400_BAD_REQUEST)
         
         except Expense.DoesNotExist:
-            return Response({"status":"failed","message":"Expense not found"},status=status.HTTP_400_BAD_REQUEST)
+            return Response({"status":"failed","message":"Expense not found"},status=status.HTTP_404_NOT_FOUND)
         
         except Exception as e:
             return Response({"status":"error","message":str(e)},status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -348,7 +348,7 @@ def calculate_group_balances(request):
         group = Group.objects.get(id = group_id)
 
         if not group.members.filter(id = request.user.id).exists():
-            return Response({"status":"failed","message":"You can not access this group because you are not the member of this group"})
+            return Response({"status":"failed","message":"You can not access this group because you are not the member of this group"},status=status.HTTP_403_FORBIDDEN)
         
         # Delete existing expense splits for the group to prevent duplicate records, when the API is called multiple times.
         ExpenseSplit.objects.filter(group=group).delete()     
@@ -464,7 +464,7 @@ def calculate_expense(request):
         group = Group.objects.get(id = group_id)
 
         if not group.members.filter(id = request.user.id).exists():
-            return Response({"status":"failed","message":"You can not access this group because you are not the member of this group"})
+            return Response({"status":"failed","message":"You can not access this group because you are not the member of this group"},status=status.HTTP_403_FORBIDDEN)
 
         expenses = Expense.objects.filter(group = group_id)
 
