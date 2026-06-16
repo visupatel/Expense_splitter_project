@@ -200,7 +200,9 @@ def forgot_password(request):
         return Response({
             "status":"success",
             "message":"OTP send successfully..",
-        })
+        },
+        status=status.HTTP_200_OK
+        )
     
     except User.DoesNotExist:
         return Response({
@@ -304,7 +306,7 @@ def logout(request):
     try:
         refresh_token = request.data.get('refresh_token')
         if not refresh_token:
-            return Response({"status":"failed","message":"'refresh_token' must be required"})
+            return Response({"status":"failed","message":"'refresh_token' must be required"},status=status.HTTP_400_BAD_REQUEST)
 
         """requested refresh_token is a plain text string so RefreshToken() validate
         that token and convert that string into object"""
