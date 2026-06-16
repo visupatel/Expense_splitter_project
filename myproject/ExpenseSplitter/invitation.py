@@ -6,7 +6,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from django.core.mail import send_mail
 from .validation import isValid_type
 from django.conf import settings
-from .email_format import invitation_email
+from .email_format import invitation_email,registration_email,welcome_email
 from django.utils.html import strip_tags
 
 
@@ -111,10 +111,23 @@ def join_group(request,group_id,email):
         # if user is already rgistered in the app then add directly
         user = User.objects.get(email=email)
         group.members.add(user)
+        
+        html_message = welcome_email(user,group)
+        message = strip_tags(html_message)
+
+        send_mail(
+            subject=f"Welcome to {group.name}",
+            message=message,
+            from_email=settings.EMAIL_HOST_USER,
+            html_message=html_message,
+            recipient_list=[email],
+            fail_silently=False
+
+        )
 
         return Response({
             "status":"success",
-            "message":f"Welcome! You are joined in '{group.name}' group. Now you are the member of '{group.name}'"
+            "message":"Welcome email send successfully..."
         },
         status=status.HTTP_200_OK
         )
@@ -122,9 +135,21 @@ def join_group(request,group_id,email):
     # if user is not registered in the app then send link for registration.
     except User.DoesNotExist:
         link = request.build_absolute_uri(f'/api/register/?group_id={group.id}&email={email}')
+        html_message = registration_email(group,email,link)
+        message = strip_tags(html_message)
+
+        send_mail(
+            subject=f"Welcome to {group.name}",
+            message=message,
+            from_email=settings.EMAIL_HOST_USER,
+            html_message=html_message,
+            recipient_list=[email],
+            fail_silently=False
+
+        )
         return Response({
             "status":"success",
-            "message":f"May be you don't register yet. Please register via below link.\nregister_link:{link}"
+            "message":"Registered email send successfully..."
         },
         status=status.HTTP_200_OK
         )

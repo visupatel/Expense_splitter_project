@@ -5,6 +5,8 @@ from rest_framework_simplejwt.exceptions import InvalidToken
 class CustomJWTAuthentication(JWTAuthentication):
 
     def authenticate(self, request):
+
+        # to check access token expiration 
         header = self.get_header(request)
         if header is None:
             return None
@@ -22,6 +24,7 @@ class CustomJWTAuthentication(JWTAuthentication):
                 "message":"Token is expired."
             })
         
+        # to check old access token is valid when user again login.
         user = self.get_user(validated_token)
 
         token_version = validated_token.get("token_version")

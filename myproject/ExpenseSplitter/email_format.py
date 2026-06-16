@@ -1,4 +1,4 @@
-
+# invite members in group
 def invitation_email(group, admin_name, invitation_link):
     return f"""
     <html>
@@ -47,58 +47,116 @@ def invitation_email(group, admin_name, invitation_link):
     """
 
 
-
-
-
+# send otp
 def otp_email(user, otp):
     return f"""
-    <div style="font-family:Arial; background:#f4f6f7; padding:20px;">
+    <html>
+    <body style="margin:0; padding:0; background:#f4f6f7; font-family:Arial, sans-serif;">
+        <div style="font-family:Arial; background:#f4f6f7; padding:20px;">
 
-        <div style="max-width:500px; margin:auto; background:#fff; padding:25px; border-radius:10px;">
+            <div style="max-width:500px; margin:auto; background:#fff; padding:25px; border-radius:10px;">
 
-            <h2 style="color:#2f8f89; text-align:center;">OTP Verification 🔐</h2>
+                <h2 style="color:#2f8f89; text-align:center;">OTP Verification 🔐</h2>
 
-            <p>Hello <b>{user.username}</b>,</p>
+                <p>Hello <b>{user.username}</b>,</p>
 
-            <p>Your OTP for password reset is:</p>
+                <p>Your OTP for password reset is:</p>
 
-            <div style="font-size:22px; text-align:center; padding:15px;
-                        background:#f1f7f7; border-radius:8px; margin:20px 0;">
-                <b>{otp}</b>
+                <div style="font-size:22px; text-align:center; padding:15px;
+                            background:#f1f7f7; border-radius:8px; margin:20px 0;">
+                    <b>{otp}</b>
+                </div>
+
+                <p style="color:red;">
+                    This OTP will expire in 10 minutes. Do not share it with anyone.
+                </p>
+
             </div>
-
-            <p style="color:red;">
-                This OTP will expire in 10 minutes. Do not share it with anyone.
-            </p>
-
         </div>
-    </div>
+    </body>
+    </html>
+    """
+
+# send alert mail if budget limit exceeded
+def budget_alert_email(group, category, limit, spent):
+    return f"""
+    <html>
+    <body style="margin:0; padding:0; background:#f4f6f7; font-family:Arial, sans-serif;">
+        <div style="font-family:Arial; background:#f4f6f7; padding:20px;">
+
+            <div style="max-width:550px; margin:auto; background:#fff; padding:25px; border-radius:10px;">
+
+                <h2 style="color:#e74c3c; text-align:center;">Budget Alert 🔔</h2>
+
+                <p>Hello Group Member,</p>
+
+                <p>Budget limit for <b>{category}</b> has been exceeded in group
+                <b>{group.name}</b>.</p>
+
+                <div style="background:#f9ebea; padding:15px; border-radius:8px; margin:20px 0;">
+                    <p><b>Budget Limit:</b> {limit}</p>
+                    <p><b>Total Spent:</b> {spent}</p>
+                </div>
+
+                <p>Please review your expenses.</p>
+
+            </div>
+        </div>
+    </body>
+    </html>
     """
 
 
-
-
-
-def budget_alert_email(group, category, limit, spent):
+# add user in group and send welcome mail if user is already registered
+def welcome_email(user, group):
     return f"""
-    <div style="font-family:Arial; background:#f4f6f7; padding:20px;">
+    <html>
+    <body style="margin:0; padding:0; background:#f4f6f7; font-family:Arial, sans-serif;">
+        <div style="font-family:Arial; padding:20px; background:#f4f6f7;">
 
-        <div style="max-width:550px; margin:auto; background:#fff; padding:25px; border-radius:10px;">
+            <div style="max-width:500px; margin:auto; background:#fff; padding:20px; border-radius:10px;">
 
-            <h2 style="color:#e74c3c; text-align:center;">Budget Alert ⚠️</h2>
+                <h2 style="color:#2f8f89;">Welcome 🎉</h2>
 
-            <p>Hello Group Member,</p>
+                <p>Hello <b>{user.username}</b>,</p>
 
-            <p>Budget limit for <b>{category}</b> has been exceeded in group
-            <b>{group.name}</b>.</p>
+                <p>You have successfully joined <b>{group.name}</b> group.</p>
 
-            <div style="background:#f9ebea; padding:15px; border-radius:8px; margin:20px 0;">
-                <p><b>Budget Limit:</b> {limit}</p>
-                <p><b>Total Spent:</b> {spent}</p>
+                <div style="background:#f1f7f7; padding:15px; border-radius:8px;">
+                    <p><b>Group Admin:</b> {group.admin.username}</p>
+                    <p><b>Total Members:</b> {group.members.count()}</p>
+                </div>
+
             </div>
-
-            <p>Please review your expenses.</p>
-
         </div>
-    </div>
+    </body>
+    </html>
+    """
+
+
+# send registeration mail with registration link if user not registered yet.
+def registration_email(group, email, link):
+    return f"""
+    <html>
+    <body style="margin:0; padding:0; background:#f4f6f7; font-family:Arial, sans-serif;">
+        <div style="font-family:Arial; padding:20px; background:#f4f6f7;">
+
+            <div style="max-width:500px; margin:auto; background:#fff; padding:20px; border-radius:10px; text-align:center;">
+
+                <h2 style="color:#e67e22;">Join Our App 🚀</h2>
+
+                <p>Hello,</p>
+
+                <p>You are invited to join <b>{group.name}</b>.</p>
+
+                <a href="{link}"
+                style="background:#2f8f89; color:white; padding:12px 20px;
+                text-decoration:none; border-radius:6px; display:inline-block; margin-top:20px;">
+                Register Now
+                </a>
+
+            </div>
+        </div>
+    </body>
+    </html>
     """

@@ -148,24 +148,26 @@ class ExpenseView(APIView):
             start_date = request.data.get('start_date')
             end_date = request.data.get('end_date')
 
-            if not group_id:
-                return Response({"status":"failed","message":"'group_id' must be required"},status=status.HTTP_400_BAD_REQUEST)
-            
             if not page_number or not page_size:
                 return Response({"status":"failed","meassage":"'page_number' and 'page_size' must be required"},status=status.HTTP_400_BAD_REQUEST)
             
             page_number = isValid_type(int,page_number,"integer","page_number")
             page_size = isValid_type(int,page_size,"integer","page_size")
-            group_id = isValid_type(int,group_id,'integer','group_id')
 
             if page_number <= 0 or page_size <= 0:
                 return Response({"status":"failed" ,"message":"page and page_size must be greater than 0"},status=status.HTTP_400_BAD_REQUEST)
             
-            group = Group.objects.get(id = group_id)
-            expenses = Expense.objects.filter(group = group)
+            if group_id:
+                group_id = isValid_type(int,group_id,'integer','group_id')
+                group = Group.objects.get(id = group_id)
 
-            if not group.members.filter(id = request.user.id).exists():
-                return Response({"status":"failed","message":"You can not access this group because you are not the member of this group"},status=status.HTTP_403_FORBIDDEN)
+                if not group.members.filter(id = request.user.id).exists():
+                    return Response({"status":"failed","message":"You can not access this group because you are not the member of this group"},status=status.HTTP_403_FORBIDDEN)
+
+                expenses = Expense.objects.filter(group = group)
+            
+            else:
+                expenses = Expense.objects.filter(group__membres = request.user)
 
             if search:
                 expenses = expenses.filter(Q(item__icontains = search)|Q(amount_paid__icontains = search)|Q(paid_by__username__icontains = search)|Q(skipped_member__id__icontains = search)|Q(created_by__username__icontains=search))
@@ -201,6 +203,7 @@ class ExpenseView(APIView):
                         "created_at":expense.created_at,
                         "updated_at":expense.updated_at,
                         "receipt":expense.receipt,
+                        "group":expense.group.name,
                     })
                 
             return Response({
