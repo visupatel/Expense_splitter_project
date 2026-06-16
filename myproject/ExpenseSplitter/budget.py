@@ -60,7 +60,10 @@ class BudgetView(APIView):
         except ValueError as e:
             if "time data" in str(e):      # ValueError for date format
                 return Response({"status":"failed","message":f"date '{date}' does not match the format 'YYYY-MM-DD'"},status=status.HTTP_400_BAD_REQUEST)
-
+            
+            if "unconverted data" in str(e):     # handle date range
+                return Response({"status":"failed","message":"date is out of range, date range is 1 to 31. depending on month'"},status=status.HTTP_400_BAD_REQUEST)
+            
             # for type conversion
             return Response({"status":"failed","message":str(e)},status=status.HTTP_400_BAD_REQUEST)
         

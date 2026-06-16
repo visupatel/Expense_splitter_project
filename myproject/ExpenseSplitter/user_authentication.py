@@ -141,7 +141,6 @@ def userlogin(request):
         
         # update the last_login date if user logging in.
         user.last_login = timezone.now()
-        user.save()
 
         user.token_version += 1
         user.save()
@@ -313,7 +312,7 @@ def logout(request):
         """requested refresh_token is a plain text string so RefreshToken() validate
         that token and convert that string into object"""
         token = RefreshToken(refresh_token) 
-        
+    
         # if refresh token is not for authenticated user
         if token["user_id"] != request.user.id:
             return Response({

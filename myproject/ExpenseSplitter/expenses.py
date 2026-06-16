@@ -157,17 +157,12 @@ class ExpenseView(APIView):
             if page_number <= 0 or page_size <= 0:
                 return Response({"status":"failed" ,"message":"page and page_size must be greater than 0"},status=status.HTTP_400_BAD_REQUEST)
             
+            expenses = Expense.objects.filter(group__members = request.user)
+            
             if group_id:
                 group_id = isValid_type(int,group_id,'integer','group_id')
                 group = Group.objects.get(id = group_id)
-
-                if not group.members.filter(id = request.user.id).exists():
-                    return Response({"status":"failed","message":"You can not access this group because you are not the member of this group"},status=status.HTTP_403_FORBIDDEN)
-
-                expenses = Expense.objects.filter(group = group)
-            
-            else:
-                expenses = Expense.objects.filter(group__membres = request.user)
+                expenses = expenses.filter(group = group)
 
             if search:
                 expenses = expenses.filter(Q(item__icontains = search)|Q(amount_paid__icontains = search)|Q(paid_by__username__icontains = search)|Q(skipped_member__id__icontains = search)|Q(created_by__username__icontains=search))
@@ -183,7 +178,7 @@ class ExpenseView(APIView):
             paginator = Paginator(expenses,page_size)
 
             paginator_data = paginator.page(page_number)
-            
+        
             list_expenses = []
             for expense in paginator_data:
                 skipped_members = [val['id'] for val in expense.skipped_member.values("id")]
@@ -212,7 +207,7 @@ class ExpenseView(APIView):
                 "total_pages": paginator.num_pages,
                 "current_page": page_number,
                 "total_items": paginator.count,
-                f"{group.name}":list_expenses
+                "Expenses":list_expenses
                 },
                 status=status.HTTP_200_OK
                 )
