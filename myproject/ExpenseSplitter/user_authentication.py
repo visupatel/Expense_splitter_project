@@ -6,7 +6,6 @@ from .models import User,Group
 from rest_framework.permissions import AllowAny,IsAuthenticated
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
-from django.contrib.auth.models import update_last_login
 from django.contrib.auth.hashers import make_password,check_password
 from .token import generate_token,generate_otp
 from .validation import isValid_email
@@ -141,7 +140,8 @@ def userlogin(request):
             )
         
         # update the last_login date if user logging in.
-        update_last_login(None, user)
+        user.last_login = timezone.now()
+        user.save()
 
         user.token_version += 1
         user.save()
@@ -272,7 +272,9 @@ def reset_password(request):
             )
         
         user.password = make_password(new_password)
+        user.token_version += 1    # to make old access token invalid
         user.otp = None       # Again set otp to none in db 
+        user.otp_exp = None   
         user.save()
 
         return Response({
@@ -310,7 +312,16 @@ def logout(request):
 
         """requested refresh_token is a plain text string so RefreshToken() validate
         that token and convert that string into object"""
-        token = RefreshToken(refresh_token)   
+        token = RefreshToken(refresh_token) 
+        
+        # if refresh token is not for authenticated user
+        if token["user_id"] != request.user.id:
+            return Response({
+                "status":"failed",
+                "message":"Invalid refresh token."
+            }, 
+            status=status.HTTP_403_FORBIDDEN
+            )  
 
         # store refresh token in db blacklist so user can not generete access token with that refresh token 
         token.blacklist()  
