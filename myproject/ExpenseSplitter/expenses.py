@@ -15,7 +15,7 @@ from django.core.paginator import Paginator,EmptyPage
 from django.conf import settings
 from .email_format import budget_alert_email
 from django.utils.html import strip_tags
-
+from decimal import Decimal    # return accurate decimal value
 
 class ExpenseView(APIView):
 
@@ -75,7 +75,7 @@ class ExpenseView(APIView):
             
             group_id = isValid_type(int,group_id,"integer","group_id")
             
-            amount = isValid_type(float,amount,"decimal or integer","total_amount")
+            amount = isValid_type(Decimal,amount,"decimal or integer","total_amount")
             
             item = item.strip().replace(" ","").capitalize()
             
@@ -253,7 +253,7 @@ class ExpenseView(APIView):
                 expense.save()
 
             if amount:
-                amount = isValid_type(float,amount,"decimal or integer","total_amount")
+                amount = isValid_type(Decimal,amount,"decimal or integer","total_amount")
                 expense.amount_paid = amount
             
             if paid_by:
@@ -358,13 +358,13 @@ def calculate_group_balances(request):
 
         # first set all members is paid and share 0 amount.
         for member in members:
-            total_paid[member.username] = 0.0
-            total_share[member.username] = 0.0
+            total_paid[member.username] = 0
+            total_share[member.username] = 0
 
         for expense in expenses:
 
             # if member is paid amount then add the current expense amount.
-            total_paid[expense.paid_by.username] += float(expense.amount_paid)
+            total_paid[expense.paid_by.username] += expense.amount_paid
 
             skipped = expense.skipped_member.all()
 
@@ -376,7 +376,7 @@ def calculate_group_balances(request):
                 continue
             
             # calculate member's share
-            share = float(expense.amount_paid)/participate
+            share = expense.amount_paid/participate
 
             for member in members:
                 if member not in skipped:
@@ -471,7 +471,6 @@ def calculate_expense(request):
             group = Group.objects.get(id = group_id)
             expenses = expenses.filter(group = group)
 
-
         if search:
             expenses = expenses.filter(Q(group__name__icontains = search)|Q(item__icontains = search))
 
@@ -489,28 +488,19 @@ def calculate_expense(request):
             if expense.group.name not in final_expenses:
                 final_expenses[expense.group.name]  = {
                     "group_name":expense.group.name,
-                    "total_expense":0,
+                    "total_expense":0,      
                     "category":{}
                     }
 
             # count total expense of the group
-            final_expenses[expense.group.name]["total_expense"] += float(expense.amount_paid)
+            final_expenses[expense.group.name]["total_expense"] += expense.amount_paid
                     
             # count category amount
             if expense.item in final_expenses[expense.group.name]["category"]:
-                final_expenses[expense.group.name]["category"][expense.item] += float(expense.amount_paid)
+                final_expenses[expense.group.name]["category"][expense.item] += expense.amount_paid
 
             else:
-                final_expenses[expense.group.name]["category"][expense.item] = float(expense.amount_paid)            
-        
-        # round up total expense and category amount by 2 decimal
-        for group in final_expenses.values():
-            group["total_expense"] = round(group["total_expense"], 2)
-
-            for item in group["category"]:
-                group["category"][item] = round(
-                    group["category"][item], 2
-                )
+                final_expenses[expense.group.name]["category"][expense.item] = expense.amount_paid      
 
         return Response({
             "status":"success",
