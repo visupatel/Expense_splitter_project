@@ -40,7 +40,7 @@ class GroupView(APIView):
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
     
-    # get group info only by group member.
+    # get all group info where authenticated user is a group member.
     def get(self,request):
         try:
             group_id = request.data.get('group_id')
@@ -236,14 +236,6 @@ def transfer_admin(request):
             "message":"Group not found"
         },
         status=status.HTTP_404_NOT_FOUND
-        )
-
-    except User.DoesNotExist:
-        return Response({
-            "status":"failed",
-            "message":"User is not a member of this group"
-        },
-        status=status.HTTP_400_BAD_REQUEST
         )
     
     except Exception as e:

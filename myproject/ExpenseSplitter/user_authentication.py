@@ -325,6 +325,11 @@ def logout(request):
         # store refresh token in db blacklist so user can not generete access token with that refresh token 
         token.blacklist()  
 
+        # to make access token invalid.
+        user = User.objects.get(id = request.user.id)
+        user.token_version += 1
+        user.save()
+
         return Response({"status":"success","message":"User logged out successfully"},status=status.HTTP_200_OK)
     
     # if refresh token is already expired then raise tokenerror. TokenError catches expired,invalid or tampered tokens

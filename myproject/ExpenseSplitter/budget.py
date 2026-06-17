@@ -105,20 +105,26 @@ class BudgetView(APIView):
             # return a page object of given page number and raise Emptypage error if page has no content
             paginator_data = paginator.page(page_number)
 
-            budget_list = []
+            budget_data = {}
             for budget in paginator_data:
-                budget_list.append({
+                data = {
                     "id":budget.id,
                     "category":budget.category,
                     "monthly_budget":budget.monthly_budget,
                     "date":budget.date,
-                    "group":budget.group.name,
-                })
+                }
+
+                if  budget.group.name not in budget_data:
+                    budget_data[budget.group.name] = []
+                budget_data[budget.group.name].append(data)
 
             return Response({
                 "status":"success",
                 "message":"Budget info fetched....",
-                "data": budget_list
+                "total_page":paginator.num_pages,
+                "current_page":page_number,
+                "total_items":paginator.count,
+                "data": budget_data
                 },
                 status=status.HTTP_200_OK
                 )

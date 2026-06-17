@@ -165,7 +165,7 @@ class ExpenseView(APIView):
                 expenses = expenses.filter(group = group)
 
             if search:
-                expenses = expenses.filter(Q(item__icontains = search)|Q(amount_paid__icontains = search)|Q(paid_by__username__icontains = search)|Q(skipped_member__id__icontains = search)|Q(created_by__username__icontains=search))
+                expenses = expenses.filter(Q(item__icontains = search)|Q(paid_by__username__icontains=search)|Q(amount_paid__icontains = search)|Q(created_by__username__icontains=search)|Q(group__name__icontains = search)|Q(skipped_member__id__icontains = search))
             
             if start_date and end_date:
                 start_date = datetime.strptime(start_date,"%Y-%m-%d").date()
@@ -174,19 +174,21 @@ class ExpenseView(APIView):
                 expenses = expenses.filter(
                     date__range=[start_date, end_date]
                 )
-
+            
+            expenses = expenses.distinct()    # remove duplicate records
+            
             paginator = Paginator(expenses,page_size)
 
             paginator_data = paginator.page(page_number)
         
-            group_expenses = {}
+            group_expenses = []
             for expense in paginator_data:
                 skipped_members = [val['id'] for val in expense.skipped_member.values("id")]
                 updated_by = None
                 if expense.updated_by is not None:
                     updated_by = expense.updated_by.username
 
-                expenses_data = {
+                group_expenses.append({
                         "id":expense.id,
                         "item":expense.item,
                         "total_amount":expense.amount_paid,
@@ -198,12 +200,8 @@ class ExpenseView(APIView):
                         "created_at":expense.created_at,
                         "updated_at":expense.updated_at,
                         "receipt":expense.receipt,
-                    }
-                
-                if expense.group.name not in group_expenses:
-                    group_expenses[expense.group.name] = []
-
-                group_expenses[expense.group.name].append(expenses_data)
+                        "group_name":expense.group.name,
+                    })
                             
             return Response({
                 "status":"success",
@@ -366,8 +364,7 @@ def calculate_group_balances(request):
         for expense in expenses:
 
             # if member is paid amount then add the current expense amount.
-            if expense.paid_by.username in total_paid.keys():
-                total_paid[expense.paid_by.username] += float(expense.amount_paid)
+            total_paid[expense.paid_by.username] += float(expense.amount_paid)
 
             skipped = expense.skipped_member.all()
 
@@ -396,7 +393,7 @@ def calculate_group_balances(request):
             # if balance is (+) then other member pays to this memebr, 
             # if balance (-) this member need to pay to other.)
             balances[username] = round(total_paid[username] - total_share[username],2)
-    
+
         result = []
         for user,balance in balances.items():
 
@@ -452,24 +449,31 @@ def calculate_group_balances(request):
 def calculate_expense(request):
     try:
         group_id = request.data.get('group_id')
-        category = request.data.get('category')
+        search = request.data.get('search')
+        page_number = request.data.get("page_number")
+        page_size = request.data.get('page_size')
         start_date = request.data.get('start_date')
         end_date = request.data.get('end_date')
 
-        if not group_id:
-            return Response({"status":"failed","message":"'group_id' must be required"},status=status.HTTP_400_BAD_REQUEST)
+        if not page_number or not page_size:
+            return Response({"status":"failed","meassage":"'page_number' and 'page_size' must be required"},status=status.HTTP_400_BAD_REQUEST)
         
-        group_id = isValid_type(int,group_id,"integer","group_id")
-        group = Group.objects.get(id = group_id)
+        page_number = isValid_type(int,page_number,"integer","page_number")
+        page_size = isValid_type(int,page_size,"integer","page_size")
 
-        if not group.members.filter(id = request.user.id).exists():
-            return Response({"status":"failed","message":"You can not access this group because you are not the member of this group"},status=status.HTTP_403_FORBIDDEN)
+        if page_number <= 0 or page_size <= 0:
+            return Response({"status":"failed" ,"message":"page and page_size must be greater than 0"},status=status.HTTP_400_BAD_REQUEST)
+        
+        expenses = Expense.objects.filter(group__members = request.user)
+        
+        if group_id:
+            group_id = isValid_type(int,group_id,'integer','group_id')
+            group = Group.objects.get(id = group_id)
+            expenses = expenses.filter(group = group)
 
-        expenses = Expense.objects.filter(group = group_id)
 
-        if category:
-            category = category.strip().replace(" ","").capitalize()
-            expenses = expenses.filter(item__icontains = category)
+        if search:
+            expenses = expenses.filter(Q(group__name__icontains = search)|Q(item__icontains = search))
 
         if start_date and end_date:
             start_date = datetime.strptime(start_date,"%Y-%m-%d").date()
@@ -479,11 +483,42 @@ def calculate_expense(request):
                 date__range=[start_date, end_date]
             )
 
-        total_expense = 0
+        final_expenses = {}
         for expense in expenses:
-            total_expense += float(expense.amount_paid)
+           
+            if expense.group.name not in final_expenses:
+                final_expenses[expense.group.name]  = {
+                    "group_name":expense.group.name,
+                    "total_expense":0,
+                    "category":{}
+                    }
 
-        return Response({"status":"success","message":"Expense calculated...","expense":{"total_expense":round(total_expense,2)}},status=status.HTTP_200_OK)
+            # count total expense of the group
+            final_expenses[expense.group.name]["total_expense"] += float(expense.amount_paid)
+                    
+            # count category amount
+            if expense.item in final_expenses[expense.group.name]["category"]:
+                final_expenses[expense.group.name]["category"][expense.item] += float(expense.amount_paid)
+
+            else:
+                final_expenses[expense.group.name]["category"][expense.item] = float(expense.amount_paid)            
+        
+        # round up total expense and category amount by 2 decimal
+        for group in final_expenses.values():
+            group["total_expense"] = round(group["total_expense"], 2)
+
+            for item in group["category"]:
+                group["category"][item] = round(
+                    group["category"][item], 2
+                )
+
+        return Response({
+            "status":"success",
+            "message":"Expense calculated...",
+            "expenses":list(final_expenses.values())
+            },
+            status=status.HTTP_200_OK
+            )
     
     except ValueError as e:
         if "time data" in str(e):
