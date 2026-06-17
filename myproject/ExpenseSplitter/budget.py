@@ -34,6 +34,14 @@ class BudgetView(APIView):
             date = date.replace(day=1)        # reaplace day into 1 date( ex: 2026-06-25 --> 2026-06-01)
 
             group_id = isValid_type(int,group_id,'integer',"group_id")
+            if group_id <= 0:
+                return Response({
+                    "status":"failed",
+                    "message":"'group_id' must be greater than 0"
+                },
+                status=status.HTTP_400_BAD_REQUEST
+                )
+            
             group = Group.objects.get(id = group_id)
             
             if group.admin != request.user:
@@ -89,11 +97,27 @@ class BudgetView(APIView):
             if page_number <= 0 or page_size <= 0:
                 return Response({"status":"failed" ,"message":"page and page_size must be greater than 0"},status=status.HTTP_400_BAD_REQUEST)
 
+            if page_size > 100:
+                return Response({
+                    "status":"failed",
+                    "message":"maximum 100 'page_size' is allowed"
+                },
+                status=status.HTTP_400_BAD_REQUEST
+                )
+            
             # filtr group members by authenticated user
             budgets = Budget.objects.filter(group__members = request.user)
            
             if group_id:
                 group_id = isValid_type(int,group_id,"integer","group_id")
+                if group_id <= 0:
+                    return Response({
+                        "status":"failed",
+                        "message":"'group_id' must be greater than 0"
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                    )
+                
                 group = Group.objects.get(id = group_id)
                 budgets = budgets.filter(group = group)
             
@@ -156,7 +180,15 @@ class BudgetView(APIView):
             if not budget_id:
                 return Response({"status":"failed","message":"'budget_id' must be required"},status=status.HTTP_400_BAD_REQUEST)
             
-            budget_id = isValid_type(int,budget_id,'integer',"group_id")
+            budget_id = isValid_type(int,budget_id,'integer',"budget_id")
+            if budget_id <= 0:
+                return Response({
+                    "status":"failed",
+                    "message":"'budget_id' must be greater than 0"
+                },
+                status=status.HTTP_400_BAD_REQUEST
+                )
+            
             budget = Budget.objects.get(id = budget_id)
             
             if budget.group.admin != request.user:
@@ -207,6 +239,14 @@ class BudgetView(APIView):
                 return Response({"status":"failed","message":"'budget_id' must be required"},status=status.HTTP_400_BAD_REQUEST)
 
             budget_id = isValid_type(int,budget_id,"integer","budget_id")
+            if budget_id <= 0:
+                return Response({
+                    "status":"failed",
+                    "message":"'budget_id' must be greater than 0"
+                },
+                status=status.HTTP_400_BAD_REQUEST
+                )
+            
             budget = Budget.objects.get(id = budget_id)
             
             if budget.group.admin != request.user:

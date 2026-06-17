@@ -57,11 +57,27 @@ class GroupView(APIView):
             if page_number <= 0 or page_size <= 0:
                 return Response({"status":"failed" ,"message":"page and page_size must be greater than 0"},status=status.HTTP_400_BAD_REQUEST)
 
+            if page_size > 100:
+                return Response({
+                    "status":"failed",
+                    "message":"maximum 100 'page_size' is allowed"
+                },
+                status=status.HTTP_400_BAD_REQUEST
+                )
+            
             # filtr group members by authenticated user
             groups = Group.objects.filter(members = request.user)
            
             if group_id:
                 group_id = isValid_type(int,group_id,"integer","group_id")
+                if group_id <= 0:
+                    return Response({
+                        "status":"failed",
+                        "message":"'group_id' must be greater than 0"
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                    )
+                
                 groups = groups.filter(id = group_id)
 
             if search:
@@ -122,6 +138,15 @@ class GroupView(APIView):
                 return Response({"status":"failed","message":"'group_id' must be required"},status=status.HTTP_400_BAD_REQUEST)
             
             group_id = isValid_type(int,group_id,"integer","group_id")
+            
+            if group_id <= 0:
+                return Response({
+                    "status":"failed",
+                    "message":"'group_id' must be greater than 0"
+                },
+                status=status.HTTP_400_BAD_REQUEST
+                )
+            
             group = Group.objects.get(id = group_id)
             
             if group.admin != request.user:
@@ -163,6 +188,15 @@ class GroupView(APIView):
                 return Response({"status":"failed","message":"'group_id' must be required"},status=status.HTTP_400_BAD_REQUEST)
             
             group_id = isValid_type(int,group_id,"integer","group_id")
+
+            if group_id <= 0:
+                return Response({
+                    "status":"failed",
+                    "message":"'group_id' must be greater than 0"
+                },
+                status=status.HTTP_400_BAD_REQUEST
+                )
+            
             group = Group.objects.get(id = group_id)
             
             if group.admin != request.user:
@@ -206,7 +240,15 @@ def transfer_admin(request):
             },
             status=status.HTTP_400_BAD_REQUEST
             )
-
+        group_id = isValid_type(int,group_id,"integer","group_id")
+        if group_id <= 0:
+            return Response({
+                "status":"failed",
+                "message":"'group_id' must be greater than 0"
+            },
+            status=status.HTTP_400_BAD_REQUEST
+            )
+        
         group = Group.objects.get(id=group_id)
 
         # Only admin can transfer role
@@ -261,6 +303,13 @@ def exit_group(request):
             return Response({"status":"failed","message":"'group_id' must be required"},status=status.HTTP_400_BAD_REQUEST)
         
         group_id = isValid_type(int,group_id,"integer","group_id")
+        if group_id <= 0:
+            return Response({
+                "status":"failed",
+                "message":"'group_id' must be greater than 0"
+            },
+            status=status.HTTP_400_BAD_REQUEST
+            )
         group = Group.objects.get(id = group_id)
 
         if not group.members.filter(id = request.user.id).exists():

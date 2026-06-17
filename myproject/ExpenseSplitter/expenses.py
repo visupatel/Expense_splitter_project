@@ -74,6 +74,13 @@ class ExpenseView(APIView):
                 return Response({"status":"failed","message":"'paid_by' must be required"},status=status.HTTP_400_BAD_REQUEST)
             
             group_id = isValid_type(int,group_id,"integer","group_id")
+            if group_id <= 0:
+                return Response({
+                    "status":"failed",
+                    "message":"'group_id' must be greater than 0"
+                },
+                status=status.HTTP_400_BAD_REQUEST
+                )
             
             amount = isValid_type(Decimal,amount,"decimal or integer","total_amount")
             
@@ -133,8 +140,9 @@ class ExpenseView(APIView):
         
         except Group.DoesNotExist:
             return Response({'status':"failed","message":"Group not found"},status=status.HTTP_404_NOT_FOUND)
+        
         except User.DoesNotExist:
-            return Response({'status':"failed","message":"User not found"},status=status.HTTP_404_NOT_FOUND)
+            return Response({'status':"failed","message":"Not the member of this group"},status=status.HTTP_404_NOT_FOUND)
         
         except Exception as e:
             return Response({"status":"error","message":str(e)},status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -157,10 +165,27 @@ class ExpenseView(APIView):
             if page_number <= 0 or page_size <= 0:
                 return Response({"status":"failed" ,"message":"page and page_size must be greater than 0"},status=status.HTTP_400_BAD_REQUEST)
             
+            # handle memory usage and database load
+            if page_size > 100:
+                return Response({
+                    "status":"failed",
+                    "message":"maximum 100 'page_size' is allowed"
+                },
+                status=status.HTTP_400_BAD_REQUEST
+                )
+            
             expenses = Expense.objects.filter(group__members = request.user)
             
             if group_id:
                 group_id = isValid_type(int,group_id,'integer','group_id')
+                if group_id <= 0:
+                    return Response({
+                        "status":"failed",
+                        "message":"'group_id' must be greater than 0"
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                    )
+                
                 group = Group.objects.get(id = group_id)
                 expenses = expenses.filter(group = group)
 
@@ -170,6 +195,14 @@ class ExpenseView(APIView):
             if start_date and end_date:
                 start_date = datetime.strptime(start_date,"%Y-%m-%d").date()
                 end_date = datetime.strptime(end_date,"%Y-%m-%d").date()
+
+                if start_date > end_date:
+                    return Response({
+                        "status":"failed",
+                        "message":"start_date cannot be greater than end_date"
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                    )
 
                 expenses = expenses.filter(
                     date__range=[start_date, end_date]
@@ -242,6 +275,14 @@ class ExpenseView(APIView):
                 return Response({"status":"failed","message":"'expense_id' must be required"},status=status.HTTP_400_BAD_REQUEST)
             
             expense_id = isValid_type(int,expense_id,"integer","expese_id")
+            if expense_id <= 0:
+                return Response({
+                    "status":"failed",
+                    "message":"'expense_id' must be greater than 0"
+                },
+                status=status.HTTP_400_BAD_REQUEST
+                )
+            
             expense = Expense.objects.get(id = expense_id)
 
             if not expense.group.members.filter(id = request.user.id).exists():
@@ -308,6 +349,14 @@ class ExpenseView(APIView):
                 return Response({"status":"failed","message":"'expense_id' must be required"},status=status.HTTP_400_BAD_REQUEST)
             
             expense_id = isValid_type(int,expense_id,'integer','expense_id')
+            if expense_id <= 0:
+                return Response({
+                    "status":"failed",
+                    "message":"'expense_id' must be greater than 0"
+                },
+                status=status.HTTP_400_BAD_REQUEST
+                )
+            
             expense = Expense.objects.get(id = expense_id)
             
             if not expense.group.members.filter(id = request.user.id).exists():
@@ -341,6 +390,13 @@ def calculate_group_balances(request):
             return Response({"status":"failed","message":"'group_id' must be required."},status=status.HTTP_400_BAD_REQUEST)
         
         group_id = isValid_type(int,group_id,'integer','group_id')
+        if group_id <= 0:
+            return Response({
+                "status":"failed",
+                "message":"'group_id' must be greater than 0"
+            },
+            status=status.HTTP_400_BAD_REQUEST
+            )
 
         group = Group.objects.get(id = group_id)
 
@@ -464,10 +520,25 @@ def calculate_expense(request):
         if page_number <= 0 or page_size <= 0:
             return Response({"status":"failed" ,"message":"page and page_size must be greater than 0"},status=status.HTTP_400_BAD_REQUEST)
         
+        if page_size > 100:
+            return Response({
+                "status":"failed",
+                "message":"maximum 100 'page_size' is allowed"
+            },
+            status=status.HTTP_400_BAD_REQUEST
+            )
         expenses = Expense.objects.filter(group__members = request.user)
         
         if group_id:
             group_id = isValid_type(int,group_id,'integer','group_id')
+            if group_id <= 0:
+                    return Response({
+                        "status":"failed",
+                        "message":"'group_id' must be greater than 0"
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                    )
+            
             group = Group.objects.get(id = group_id)
             expenses = expenses.filter(group = group)
 
@@ -477,6 +548,14 @@ def calculate_expense(request):
         if start_date and end_date:
             start_date = datetime.strptime(start_date,"%Y-%m-%d").date()
             end_date = datetime.strptime(end_date,"%Y-%m-%d").date()
+
+            if start_date > end_date:
+                return Response({
+                    "status":"failed",
+                    "message":"start_date cannot be greater than end_date"
+                },
+                status=status.HTTP_400_BAD_REQUEST
+                )
 
             expenses = expenses.filter(
                 date__range=[start_date, end_date]
