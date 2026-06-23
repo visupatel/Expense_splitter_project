@@ -2,7 +2,7 @@ from django.utils import timezone
 from rest_framework.decorators import api_view,permission_classes
 from rest_framework import status
 from rest_framework.response import Response
-from .models import User,Group
+from .models import Invitation, User,Group
 from rest_framework.permissions import AllowAny,IsAuthenticated
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -23,14 +23,9 @@ def userregister(request):
     try:
         username = request.data.get('username')
         password = request.data.get('password')
-        email = request.GET.get('email')      # get email directly from the url
+        token = request.GET.get('token')      # get email directly from the url
+        email = request.data.get('email')
 
-        # first check url email
-        if not email:
-            email = request.data.get('email')
-
-        group_id = request.GET.get('group_id')     # to get group_id directly from the url parameter
-        
         if not username or not password:
             return Response({
                 "status":"failed",
@@ -46,6 +41,25 @@ def userregister(request):
             },
             status=status.HTTP_400_BAD_REQUEST
             )
+        
+        # for invitation link 
+        invitation = None
+        if token:
+            invitation = Invitation.objects.get(token=token,is_used = False)
+            if invitation.is_expired():
+                return Response({
+                    "status":"failed", 
+                    "message":"This invitation link has expired."
+                    }, 
+                    status=status.HTTP_400_BAD_REQUEST
+                    )   
+            
+            if email != invitation.email:
+                return Response({
+                    "status": "failed",
+                    "message": "This invitation link belongs to a different email address."
+                }, 
+                status=status.HTTP_400_BAD_REQUEST)
         
         if User.objects.filter(username=username).exists():
             return Response({
@@ -69,7 +83,7 @@ def userregister(request):
         password = isValid_password(password)
         
         #Turn a plain-text password into a hash for database storage
-        hashed_password = make_password(password)     
+        hashed_password = make_password(password) 
 
         # prenvent user to register if group_id is invalid or not exist
         with transaction.atomic():
@@ -77,9 +91,12 @@ def userregister(request):
 
             message = f"User '{username}' registered successfully..."
             
-            if group_id:
-                group = Group.objects.get(id = group_id)
+            if invitation:
+                group = invitation.group
                 group.members.add(user)
+
+                invitation.is_used = True
+                invitation.save()
                 message += f"You are successfully joined in {group.name}"
 
         return Response({
@@ -89,10 +106,10 @@ def userregister(request):
         status=status.HTTP_201_CREATED
         )
     
-    except Group.DoesNotExist:
+    except Invitation.DoesNotExist:
         return Response({
             "status":"failed",
-            "message":"No such group exist."
+            "message":"Invalid invitation token."
         },
         status=status.HTTP_400_BAD_REQUEST
         )

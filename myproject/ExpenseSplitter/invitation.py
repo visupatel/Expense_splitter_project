@@ -129,6 +129,10 @@ def join_group(request,token):
 
         # if user is already member of the group
         if user_exist:
+
+            invitation.is_used = True
+            invitation.save()
+
             return Response({
                 "status":"failed",
                 "message":f"User already in {group.name}"
@@ -166,7 +170,7 @@ def join_group(request,token):
     
     # if user is not registered in the app then send link for registration.
     except User.DoesNotExist:
-        link = request.build_absolute_uri(f'/api/register/?group_id={group.id}&email={email}')
+        link = (f'{settings.NGROK_URL}/api/register/?token={invitation.token}')
         html_message = registration_email(group,email,link)
         message = strip_tags(html_message)
 

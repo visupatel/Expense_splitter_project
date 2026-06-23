@@ -121,16 +121,22 @@ AUTH_PASSWORD_VALIDATORS = [
 
 AUTH_USER_MODEL = 'ExpenseSplitter.User'
 
+# store files and images
+MEDIA_ROOT =  BASE_DIR / 'user_mediafiles'
+
+# access files and images from frontend
+MEDIA_URL = '/media/'
+
 # Internationalization
 # https://docs.djangoproject.com/en/6.0/topics/i18n/
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Asia/Kolkata'
 
 USE_I18N = True
 
-USE_TZ = True
+USE_TZ = False
 
 
 # Static files (CSS, JavaScript, Images)
@@ -138,6 +144,7 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
+# custom auhentication
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'ExpenseSplitter.authentication.CustomJWTAuthentication',
@@ -163,9 +170,3 @@ EMAIL_HOST_USER = config('EMAIL_HOST_USER')
 
 # app password
 EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD')
-
-
-import os
-
-MEDIA_ROOT =  BASE_DIR / 'user_mediafiles'
-MEDIA_URL = '/media/'

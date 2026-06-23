@@ -52,6 +52,8 @@ class GroupView(APIView):
             
             # filtr group members by authenticated user
             groups = Group.objects.filter(members = request.user)
+
+            
            
             if group_id:
                 group_id = isValid_type(int,group_id,"integer","group_id")
@@ -85,6 +87,8 @@ class GroupView(APIView):
                     "group_admin":group.admin.username,
                     "group_members":group_members,
                     "created_at":group.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+                    "updated_at":group.updated_at.strftime("%Y-%m-%d %H:%M:%S"),
+
                 })
            
             return Response({

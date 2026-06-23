@@ -29,6 +29,7 @@ class Group(models.Model):
         return self.name
     
 class Invitation(models.Model):
+    id = models.AutoField(primary_key=True)
     group = models.ForeignKey(Group,on_delete=models.CASCADE,related_name="invitation")
     email = models.EmailField()
     token = models.UUIDField(default=uuid.uuid4,unique=True)
@@ -36,13 +37,13 @@ class Invitation(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     def is_expired(self):
-        return timezone.now() > self.created_at + timezone.timedelta(minutes=5)
+        return timezone.now() > self.created_at + timezone.timedelta(hours=24)
     
 
 class Budget(models.Model):
     id = models.AutoField(primary_key=True)
     group = models.ForeignKey(Group,on_delete=models.CASCADE,related_name='budget')
-    monthly_budget = models.DecimalField(max_digits=7,decimal_places=2)
+    monthly_budget = models.DecimalField(max_digits=10,decimal_places=2)
     category = models.CharField(max_length=200)
     date = models.DateField(default=timezone.now)
 
