@@ -5,13 +5,14 @@ from rest_framework.response import Response
 from .models import Group,Budget
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
-from .validation import isValid_type
+from .validation import check_pagination, isValid_type
 from django.db.models import Q
 from django.core.paginator import Paginator,EmptyPage
 
 
 class BudgetView(APIView):
     permission_classes = [IsAuthenticated]
+    
     def post(self,request):
         try:
             group_id = request.data.get('group_id')
@@ -88,22 +89,7 @@ class BudgetView(APIView):
             page_number = request.data.get("page_number")
             page_size = request.data.get('page_size')
 
-            if not page_number or not page_size:
-                return Response({"status":"failed","meassage":"'page_number' and 'page_size' must be required"},status=status.HTTP_400_BAD_REQUEST)
-            
-            page_number = isValid_type(int,page_number,"integer","page_number")
-            page_size = isValid_type(int,page_size,"integer","page_size")
-            
-            if page_number <= 0 or page_size <= 0:
-                return Response({"status":"failed" ,"message":"page and page_size must be greater than 0"},status=status.HTTP_400_BAD_REQUEST)
-
-            if page_size > 100:
-                return Response({
-                    "status":"failed",
-                    "message":"maximum 100 'page_size' is allowed"
-                },
-                status=status.HTTP_400_BAD_REQUEST
-                )
+            page_number,page_size = check_pagination(page_number,page_size)
             
             # filtr group members by authenticated user
             budgets = Budget.objects.filter(group__members = request.user)
@@ -136,6 +122,7 @@ class BudgetView(APIView):
                     "category":budget.category,
                     "monthly_budget":budget.monthly_budget,
                     "date":budget.date,
+                    "created_by":budget.group.admin.username
                 }
 
                 if  budget.group.name not in budget_data:
@@ -158,7 +145,7 @@ class BudgetView(APIView):
                 
         except Group.DoesNotExist:
             return Response({'status':"failed","message":"Group not found"},status=status.HTTP_404_NOT_FOUND)
-        
+
         except EmptyPage:
             return Response({"status":"failed" ,"message": "Page not found"},status=status.HTTP_404_NOT_FOUND)
 
@@ -215,7 +202,8 @@ class BudgetView(APIView):
                 budget.monthly_budget = amount
 
             if date:
-                date = datetime.strptime(date,'%Y-%m-%d')
+                date = datetime.strptime(date,'%Y-%m-%d').date()
+                date = date.replace(day=1)
                 budget.date = date
             
             budget.save()

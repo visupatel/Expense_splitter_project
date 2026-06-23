@@ -15,7 +15,7 @@ urlpatterns = [
     path('token/refresh/',TokenRefreshView.as_view()),
     path('create_group/',GroupView.as_view()),
     path('invite/members/',send_invitation_link),
-    path('invitation_link/<int:group_id>/<str:email>/',join_group),
+    path('invitation_link/<uuid:token>/',join_group),
     path('exit_group/',exit_group),
     path("transfer_role/",transfer_admin),
     path('manage_budget/',BudgetView.as_view()),

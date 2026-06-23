@@ -8,11 +8,12 @@ from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth.hashers import make_password,check_password
 from .token import generate_token,generate_otp
-from .validation import isValid_email
+from .validation import isValid_email, isValid_password
 from django.core.mail import send_mail
 from django.conf import settings
 from .email_format import otp_email
 from django.utils.html import strip_tags
+from django.db import transaction
 
 
 # register
@@ -46,15 +47,6 @@ def userregister(request):
             status=status.HTTP_400_BAD_REQUEST
             )
         
-        # check email format(validation.py)
-        if not isValid_email(email):
-            return Response({
-                "status":"failed",
-                "message":" Please enter 'email' in valid format(ex: example@gmail.com)"
-            },
-            status=status.HTTP_400_BAD_REQUEST
-            )
-        
         if User.objects.filter(username=username).exists():
             return Response({
                 "status":"failed",
@@ -63,7 +55,8 @@ def userregister(request):
             status=status.HTTP_400_BAD_REQUEST
             )
         
-        email = email.lower()     # convert email in lowecase
+        # check email format(validation.py)
+        email = isValid_email(email)     
 
         if User.objects.filter(email=email).exists():
             return Response({
@@ -73,17 +66,21 @@ def userregister(request):
             status=status.HTTP_400_BAD_REQUEST
             )
         
+        password = isValid_password(password)
+        
         #Turn a plain-text password into a hash for database storage
         hashed_password = make_password(password)     
 
-        user = User.objects.create(username=username,password=hashed_password,email=email)
+        # prenvent user to register if group_id is invalid or not exist
+        with transaction.atomic():
+            user = User.objects.create(username=username,password=hashed_password,email=email)
 
-        message = f"User '{username}' registered successfully..."
-        
-        if group_id:
-            group = Group.objects.get(id = group_id)
-            group.members.add(user)
-            message += f"You are successfully joined in {group.name}"
+            message = f"User '{username}' registered successfully..."
+            
+            if group_id:
+                group = Group.objects.get(id = group_id)
+                group.members.add(user)
+                message += f"You are successfully joined in {group.name}"
 
         return Response({
             "status":"success",
@@ -99,6 +96,14 @@ def userregister(request):
         },
         status=status.HTTP_400_BAD_REQUEST
         )
+    
+    except ValueError as e:
+        return Response({
+            "status":"failed",
+            "message":str(e)
+            },
+            status=status.HTTP_400_BAD_REQUEST
+            )
         
     except Exception as e:
         return Response({
@@ -178,11 +183,12 @@ def forgot_password(request):
             status=status.HTTP_400_BAD_REQUEST
             )
         
-        email = email.lower()
+        email = isValid_email(email)  
+
         user = User.objects.get(email=email)
 
         user = generate_otp(user)      # generate otp(token.py)
-        subject = f"{timezone.now().date()} - Forgot Password Validate OTP"
+        subject = f"{timezone.now().date()} - Forgot Password isValid OTP"
         html_message = otp_email(user,user.otp)
 
         message = strip_tags(html_message)
@@ -210,6 +216,15 @@ def forgot_password(request):
         },
         status=status.HTTP_401_UNAUTHORIZED
         )
+    
+    except ValueError as e:
+        return Response({
+            "status":"failed",
+            "message":str(e)
+            },
+            status=status.HTTP_400_BAD_REQUEST
+            )
+    
     except Exception as e:
         return Response({
             "status":"error",
@@ -251,7 +266,9 @@ def reset_password(request):
             },
             status=status.HTTP_400_BAD_REQUEST
             )
-        email = email.lower()
+
+        email = isValid_email(email)
+
         user = User.objects.get(email=email)
 
         if str(otp) != user.otp:        # if otp is not mached.
@@ -262,13 +279,15 @@ def reset_password(request):
             status=status.HTTP_400_BAD_REQUEST
             )
         
-        if user.otp_exp < timezone.now():    # if time is greater than 10 minutes then otp is expired.
+        if not user.otp_exp or user.otp_exp < timezone.now():    # if time is greater than 10 minutes then otp is expired.
             return Response({
                 "status":"failed",
                 "message":"OTP expired.."
             },
             status=status.HTTP_400_BAD_REQUEST
             )
+        
+        new_password = isValid_password(new_password)
         
         user.password = make_password(new_password)
         user.token_version += 1    # to make old access token invalid
@@ -291,6 +310,15 @@ def reset_password(request):
             status=status.HTTP_401_UNAUTHORIZED
             )
     
+    except ValueError as e:
+        return Response({
+            "status":"failed",
+            "message":str(e)
+            },
+            status=status.HTTP_400_BAD_REQUEST
+            )
+
+    
     except Exception as e:
         return Response({
             "status":"error",
@@ -309,7 +337,7 @@ def logout(request):
         if not refresh_token:
             return Response({"status":"failed","message":"'refresh_token' must be required"},status=status.HTTP_400_BAD_REQUEST)
 
-        """requested refresh_token is a plain text string so RefreshToken() validate
+        """requested refresh_token is a plain text string so RefreshToken() isValid
         that token and convert that string into object"""
         token = RefreshToken(refresh_token) 
     
@@ -343,4 +371,3 @@ def logout(request):
         },
         status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
-

@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from .models import Group,User
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
-from .validation import isValid_type
+from .validation import isValid_email, isValid_type,check_pagination
 from django.db.models import Q
 from django.core.paginator import Paginator,EmptyPage
 
@@ -48,22 +48,7 @@ class GroupView(APIView):
             page_number = request.data.get("page_number")
             page_size = request.data.get('page_size')
 
-            if not page_number or not page_size:
-                return Response({"status":"failed","meassage":"'page_number' and 'page_size' must be required"},status=status.HTTP_400_BAD_REQUEST)
-            
-            page_number = isValid_type(int,page_number,"integer","page_number")
-            page_size = isValid_type(int,page_size,"integer","page_size")
-            
-            if page_number <= 0 or page_size <= 0:
-                return Response({"status":"failed" ,"message":"page and page_size must be greater than 0"},status=status.HTTP_400_BAD_REQUEST)
-
-            if page_size > 100:
-                return Response({
-                    "status":"failed",
-                    "message":"maximum 100 'page_size' is allowed"
-                },
-                status=status.HTTP_400_BAD_REQUEST
-                )
+            page_number,page_size = check_pagination(page_number,page_size)
             
             # filtr group members by authenticated user
             groups = Group.objects.filter(members = request.user)
@@ -99,6 +84,7 @@ class GroupView(APIView):
                     "group_name":group.name,
                     "group_admin":group.admin.username,
                     "group_members":group_members,
+                    "created_at":group.created_at.strftime("%Y-%m-%d %H:%M:%S"),
                 })
            
             return Response({
@@ -114,9 +100,6 @@ class GroupView(APIView):
             )
         except ValueError as e:
             return Response({"status":"failed","message":str(e)},status=status.HTTP_400_BAD_REQUEST)
-
-        except Group.DoesNotExist:
-            return Response({"status":"failed","message":"Group not found"},status=status.HTTP_404_NOT_FOUND)
         
         except EmptyPage:
             return Response({"status":"failed" ,"message": "Page not found"},status=status.HTTP_404_NOT_FOUND)
@@ -158,7 +141,7 @@ class GroupView(APIView):
                 )  
                       
             if group_name:
-                if Group.objects.filter(name=group_name).exists():
+                if Group.objects.filter(name=group_name).exclude(id=group.id).exists():
                     return Response({"status":"failed","message":f"'{group_name}' already exist please enter another 'group_name'"},status=status.HTTP_400_BAD_REQUEST)
             
                 group.name = group_name
@@ -205,7 +188,8 @@ class GroupView(APIView):
                     "message":"Only group admin can delete the group"
                 },
                 status=status.HTTP_403_FORBIDDEN
-                )            
+                )   
+                     
             group.delete()
             return Response({"status":"success","message":"Group deleted successfully..."},status=status.HTTP_200_OK)
         
@@ -240,6 +224,7 @@ def transfer_admin(request):
             },
             status=status.HTTP_400_BAD_REQUEST
             )
+        
         group_id = isValid_type(int,group_id,"integer","group_id")
         if group_id <= 0:
             return Response({
@@ -259,7 +244,16 @@ def transfer_admin(request):
             },
             status=status.HTTP_403_FORBIDDEN
             )
-
+        
+        email = isValid_email(email)  
+        if not group.members.filter(email=email).exists():
+            return Response({
+                "status":"failed",
+                "message":"No member with this email address in this group"
+            },
+            status=status.HTTP_400_BAD_REQUEST
+            )
+        
         new_admin = group.members.get(email=email)
 
         group.admin = new_admin
@@ -280,6 +274,14 @@ def transfer_admin(request):
         status=status.HTTP_404_NOT_FOUND
         )
     
+    except ValueError as e:
+        return Response({
+            "status":"failed",
+            "message":str(e)
+            },
+            status=status.HTTP_400_BAD_REQUEST
+            )
+    
     except Exception as e:
         return Response({
             "status":"error",
@@ -292,6 +294,7 @@ def transfer_admin(request):
 @api_view(['DELETE'])
 @permission_classes([IsAuthenticated])
 def exit_group(request):
+
     try:
         group_id = request.data.get('group_id')
         email = request.data.get('email')
@@ -315,6 +318,7 @@ def exit_group(request):
         if not group.members.filter(id = request.user.id).exists():
             return Response({"status":"failed","message":"You are not access this group becuase you are not the member of this group"},status=status.HTTP_403_FORBIDDEN)
 
+        email = isValid_email(email)  
         member = group.members.get(email = email)
 
         # to check member is exit by it self or removed by any group member.
@@ -328,6 +332,7 @@ def exit_group(request):
                 },
                 status=status.HTTP_400_BAD_REQUEST
                 )
+            
             group.members.remove(member)      # remove member from the group
             user = User.objects.get(email=email) 
             return Response({"status":"success","message":f"'{user.username}' exit from '{group.name}' group"},status=status.HTTP_200_OK)
@@ -365,4 +370,3 @@ def exit_group(request):
         },
         status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
-

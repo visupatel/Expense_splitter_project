@@ -1,3 +1,4 @@
+import uuid
 from django.utils import timezone
 from django.db import models
 from django.contrib.auth.models import AbstractBaseUser
@@ -21,11 +22,21 @@ class Group(models.Model):
     name = models.CharField(max_length=250,unique=True)
     admin = models.ForeignKey(User, on_delete=models.CASCADE, related_name="group_admin")
     members = models.ManyToManyField(User,related_name='members')
-    created_at = models.DateField(auto_now_add=True)
-    updated_at = models.DateField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return self.name
+    
+class Invitation(models.Model):
+    group = models.ForeignKey(Group,on_delete=models.CASCADE,related_name="invitation")
+    email = models.EmailField()
+    token = models.UUIDField(default=uuid.uuid4,unique=True)
+    is_used = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def is_expired(self):
+        return timezone.now() > self.created_at + timezone.timedelta(minutes=5)
     
 
 class Budget(models.Model):
@@ -48,8 +59,8 @@ class Expense(models.Model):
     skipped_member = models.ManyToManyField(User,related_name='skipped_members')
     created_by = models.ForeignKey(User,on_delete=models.SET_NULL,null=True,related_name='created_expenses')
     updated_by = models.ForeignKey(User,on_delete=models.SET_NULL,null=True,related_name='updated_expenses')
-    created_at = models.DateField(auto_now_add=True)
-    updated_at = models.DateField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
     date = models.DateField(default=timezone.now)
     receipt = models.JSONField(default=list)
 

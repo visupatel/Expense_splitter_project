@@ -6,7 +6,7 @@ from .models import Group,User,Expense,Budget,ExpenseSplit
 from rest_framework.permissions import IsAuthenticated
 from django.db import transaction
 from rest_framework.views import APIView
-from .validation import isValid_type
+from .validation import check_pagination, isValid_type
 from django.utils import timezone
 from django.core.mail import send_mail
 from rest_framework.decorators import api_view,permission_classes
@@ -17,8 +17,9 @@ from .email_format import budget_alert_email
 from django.utils.html import strip_tags
 from decimal import Decimal    # return accurate decimal value
 
-class ExpenseView(APIView):
-
+class ExpenseView(APIView): 
+    permission_classes = [IsAuthenticated]
+    
     # send alert mail to all group members if their monthly budget limit is crossed.
     def send_alert(self,group,item):
 
@@ -74,6 +75,7 @@ class ExpenseView(APIView):
                 return Response({"status":"failed","message":"'paid_by' must be required"},status=status.HTTP_400_BAD_REQUEST)
             
             group_id = isValid_type(int,group_id,"integer","group_id")
+            
             if group_id <= 0:
                 return Response({
                     "status":"failed",
@@ -83,12 +85,22 @@ class ExpenseView(APIView):
                 )
             
             amount = isValid_type(Decimal,amount,"decimal or integer","total_amount")
+            if amount <= 0:
+                return Response({"status":"failed","message":"'total_amount' amount must be greater than 0"},status=status.HTTP_400_BAD_REQUEST)
             
             item = item.strip().replace(" ","").capitalize()
             
             group = Group.objects.get(id = group_id)
             
             paid_by = isValid_type(int,paid_by,"integer","paid_by")
+            if paid_by <= 0:
+                return Response({
+                    "status":"failed",
+                    "message":"'paid_by' must be greater than 0"
+                },
+                status=status.HTTP_400_BAD_REQUEST
+                )
+            
             user = User.objects.get(id = paid_by)
             
             if not group.members.filter(id = request.user.id).exists():
@@ -96,15 +108,23 @@ class ExpenseView(APIView):
 
             # if who paid the amount is not a group member.
             if not group.members.filter(id = paid_by).exists():
-                return Response({"status":"failed","message":f"For 'paid_by' {user.username} is not a member of this group"},status=status.HTTP_403_FORBIDDEN)
+                return Response({"status":"failed","message":f"For 'paid_by' {user.id} is not a member of this group"},status=status.HTTP_400_BAD_REQUEST)
 
             members = []
             if skipped_member:
                 for member in skipped_member.split(","):
+                    member = isValid_type(int,member,"integer","skipped_member")
+                    if member <= 0:
+                        return Response({
+                            "status":"failed",
+                            "message":"'skipped_member' must be greater than 0"
+                        },
+                        status=status.HTTP_400_BAD_REQUEST
+                        )
 
                     # if skipped member is not a group member.
                     if not group.members.filter(id = member).exists():
-                        return Response({"status":"failed","message":f"{member} is not a member of this group for 'skipped_members"},status=status.HTTP_403_FORBIDDEN)
+                        return Response({"status":"failed","message":f"{member} is not a member of this group for 'skipped_members"},status=status.HTTP_400_BAD_REQUEST)
                     
                     skipped = User.objects.get(id = member)
                     members.append(skipped)
@@ -130,8 +150,8 @@ class ExpenseView(APIView):
                 # set skipped member for this expense(set --> add member and remove existing one).
                 expense.skipped_member.set(members)     
 
-                self.send_alert(group,item)  # if item and group matched then send mail
-                return Response({"status":"success","message":"Expense created successfully..."},status=status.HTTP_200_OK)
+            self.send_alert(group,item)  # if item and group matched then send mail
+            return Response({"status":"success","message":"Expense created successfully..."},status=status.HTTP_200_OK)
 
         except ValueError as e:
             if "time data" in str(e):
@@ -142,7 +162,7 @@ class ExpenseView(APIView):
             return Response({'status':"failed","message":"Group not found"},status=status.HTTP_404_NOT_FOUND)
         
         except User.DoesNotExist:
-            return Response({'status':"failed","message":"Not the member of this group"},status=status.HTTP_404_NOT_FOUND)
+            return Response({'status':"failed","message":"User not found"},status=status.HTTP_404_NOT_FOUND)
         
         except Exception as e:
             return Response({"status":"error","message":str(e)},status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -156,23 +176,7 @@ class ExpenseView(APIView):
             start_date = request.data.get('start_date')
             end_date = request.data.get('end_date')
 
-            if not page_number or not page_size:
-                return Response({"status":"failed","meassage":"'page_number' and 'page_size' must be required"},status=status.HTTP_400_BAD_REQUEST)
-            
-            page_number = isValid_type(int,page_number,"integer","page_number")
-            page_size = isValid_type(int,page_size,"integer","page_size")
-
-            if page_number <= 0 or page_size <= 0:
-                return Response({"status":"failed" ,"message":"page and page_size must be greater than 0"},status=status.HTTP_400_BAD_REQUEST)
-            
-            # handle memory usage and database load
-            if page_size > 100:
-                return Response({
-                    "status":"failed",
-                    "message":"maximum 100 'page_size' is allowed"
-                },
-                status=status.HTTP_400_BAD_REQUEST
-                )
+            page_number,page_size = check_pagination(page_number,page_size)
             
             expenses = Expense.objects.filter(group__members = request.user)
             
@@ -190,9 +194,17 @@ class ExpenseView(APIView):
                 expenses = expenses.filter(group = group)
 
             if search:
-                expenses = expenses.filter(Q(item__icontains = search)|Q(paid_by__username__icontains=search)|Q(amount_paid__icontains = search)|Q(created_by__username__icontains=search)|Q(group__name__icontains = search)|Q(skipped_member__id__icontains = search))
+                expenses = expenses.filter(Q(item__icontains = search.replace(" ",""))|Q(paid_by__username__icontains=search)|Q(amount_paid__icontains = search)|Q(created_by__username__icontains=search)|Q(group__name__icontains = search)|Q(skipped_member__id__icontains = search))
             
             if start_date and end_date:
+                if not start_date or not end_date:
+                    return Response({
+                        "status":"failed",
+                        "message":"'start_date' and 'end_date' both are required"
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                    )
+                
                 start_date = datetime.strptime(start_date,"%Y-%m-%d").date()
                 end_date = datetime.strptime(end_date,"%Y-%m-%d").date()
 
@@ -230,8 +242,8 @@ class ExpenseView(APIView):
                         "date":expense.date,
                         "created_by":expense.created_by.username,
                         "updated_by":updated_by,
-                        "created_at":expense.created_at,
-                        "updated_at":expense.updated_at,
+                        "created_at":expense.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+                        "updated_at":expense.updated_at.strftime("%Y-%m-%d %H:%M:%S"),
                         "receipt":expense.receipt,
                         "group_name":expense.group.name,
                     })
@@ -250,8 +262,9 @@ class ExpenseView(APIView):
         except ValueError as e:
             if "time data" in str(e):
                 return Response({"status":"failed","message": f"date does not match the format 'YYYY-MM-DD'"},status=status.HTTP_400_BAD_REQUEST)
+            
             return Response({"status":"failed","message":str(e)},status=status.HTTP_400_BAD_REQUEST)
-                
+
         except Group.DoesNotExist:
             return Response({"status":"failed","message":"Group not found"},status=status.HTTP_404_NOT_FOUND)
         
@@ -295,19 +308,40 @@ class ExpenseView(APIView):
 
             if amount:
                 amount = isValid_type(Decimal,amount,"decimal or integer","total_amount")
+                if amount <= 0:
+                    return Response({"status":"failed","message":"'total_amount' amount must be greater than 0"},status=status.HTTP_400_BAD_REQUEST)
+
                 expense.amount_paid = amount
             
             if paid_by:
+                paid_by = isValid_type(int,paid_by,"integer","paid_by")
+                if paid_by <= 0:
+                    return Response({
+                        "status":"failed",
+                        "message":"'paid_by' must be greater than 0"
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                    )
+                
                 if not expense.group.members.filter(id = paid_by).exists():
-                    return Response({"status":"failed","message":f"{paid_by} is not a member of this group"},status=status.HTTP_403_FORBIDDEN)
+                    return Response({"status":"failed","message":f"{paid_by} is not a member of this group"},status=status.HTTP_400_BAD_REQUEST)
                 user = expense.group.members.get(id = paid_by)
                 expense.paid_by = user
 
             if skipped_member:
                 members = []
                 for member in skipped_member.split(","):
+                    member = isValid_type(int,member,"integer","skipped_member")
+                    if member <= 0:
+                        return Response({
+                            "status":"failed",
+                            "message":"'skipped_member' must be greater than 0"
+                        },
+                        status=status.HTTP_400_BAD_REQUEST
+                        )
+                    
                     if not expense.group.members.filter(id = member).exists():
-                        return Response({"status":"failed","message":f"{member} is not a member of this group"},status=status.HTTP_403_FORBIDDEN)
+                        return Response({"status":"failed","message":f"{member} is not a member of this group"},status=status.HTTP_400_BAD_REQUEST)
                     
                     skipped = User.objects.get(id = member)
                     members.append(skipped)
@@ -358,6 +392,15 @@ class ExpenseView(APIView):
                 )
             
             expense = Expense.objects.get(id = expense_id)
+
+            # allow only group admin and creator of this expense
+            if expense.created_by != request.user and request.user != expense.group.admin:
+                return Response({
+                    "status":"failed",
+                    "message":"Only group admin and creator of this expense can remove this expense"
+                },
+                status=status.HTTP_403_FORBIDDEN
+                )
             
             if not expense.group.members.filter(id = request.user.id).exists():
                 return Response({"status":"failed","message":"You can not access this group because you are not the member of this group"},status=status.HTTP_403_FORBIDDEN)
@@ -405,7 +448,7 @@ def calculate_group_balances(request):
         
         # Delete existing expense splits for the group to prevent duplicate records, when the API is called multiple times.
         ExpenseSplit.objects.filter(group=group).delete()     
-
+        
         members = group.members.all()
         expenses = Expense.objects.filter(group = group)
 
@@ -431,15 +474,27 @@ def calculate_group_balances(request):
             if participate == 0:
                 continue
             
-            # calculate member's share
-            share = expense.amount_paid/participate
+            # convert rupees into paisa for exact spliting
+            paisa = int(expense.amount_paid * 100)
+            
+            # equally spliting member's share(using floor divison)
+            share = paisa//participate
+
+            # get reminder to adjust some paisa
+            reminder = paisa % participate
 
             for member in members:
                 if member not in skipped:
+                    temp_share = share
 
-                    # add share of member who not skipped.
+                    # to divide some paisas to first memebers to adjust paisa
+                    if reminder > 0:
+                        temp_share += 1
+                        reminder -= 1
+
+                    # convert paisa to rupees and add share of member who not skipped.
                     if member.username in total_share.keys():
-                        total_share[member.username] += share
+                        total_share[member.username] += (temp_share/100)
         
         balances = {}
         for member in members:
@@ -448,8 +503,8 @@ def calculate_group_balances(request):
             # calculate balance of members.
             # if balance is (+) then other member pays to this memebr, 
             # if balance (-) this member need to pay to other.)
-            balances[username] = round(total_paid[username] - total_share[username],2)
-
+            balances[username] = round(float(total_paid[username]) - total_share[username],2)
+            
         result = []
         for user,balance in balances.items():
 
@@ -511,22 +566,8 @@ def calculate_expense(request):
         start_date = request.data.get('start_date')
         end_date = request.data.get('end_date')
 
-        if not page_number or not page_size:
-            return Response({"status":"failed","meassage":"'page_number' and 'page_size' must be required"},status=status.HTTP_400_BAD_REQUEST)
+        page_number,page_size = check_pagination(page_number,page_size)
         
-        page_number = isValid_type(int,page_number,"integer","page_number")
-        page_size = isValid_type(int,page_size,"integer","page_size")
-
-        if page_number <= 0 or page_size <= 0:
-            return Response({"status":"failed" ,"message":"page and page_size must be greater than 0"},status=status.HTTP_400_BAD_REQUEST)
-        
-        if page_size > 100:
-            return Response({
-                "status":"failed",
-                "message":"maximum 100 'page_size' is allowed"
-            },
-            status=status.HTTP_400_BAD_REQUEST
-            )
         expenses = Expense.objects.filter(group__members = request.user)
         
         if group_id:
@@ -563,7 +604,6 @@ def calculate_expense(request):
 
         final_expenses = {}
         for expense in expenses:
-           
             if expense.group.name not in final_expenses:
                 final_expenses[expense.group.name]  = {
                     "group_name":expense.group.name,
@@ -581,18 +621,30 @@ def calculate_expense(request):
             else:
                 final_expenses[expense.group.name]["category"][expense.item] = expense.amount_paid      
 
+
+        final_expenses = list(final_expenses.values())
+        paginator = Paginator(final_expenses,page_size)
+        pagination_data = paginator.page(page_number)
+        
         return Response({
             "status":"success",
             "message":"Expense calculated...",
-            "expenses":list(final_expenses.values())
+            "total_pages":paginator.num_pages,
+            "current_page":page_number,
+            "total_items":paginator.count,
+            "expenses":list(pagination_data)
             },
             status=status.HTTP_200_OK
             )
     
     except ValueError as e:
         if "time data" in str(e):
-            return Response({"status":"failed","message":f"date 'start_date' = {start_date} or 'end_date' = {end_date} does not match the format 'YYYY-MM-DD'"},status=status.HTTP_400_BAD_REQUEST)
+            return Response({"status":"failed","message":f"date does not match the format 'YYYY-MM-DD'"},status=status.HTTP_400_BAD_REQUEST)
         return Response({"status":"failed","message":str(e)},status=status.HTTP_400_BAD_REQUEST)
+    
+    except EmptyPage:
+        return Response({"status":"failed","message":"page not found"},status=status.HTTP_404_NOT_FOUND)
+        
     except Group.DoesNotExist:
             return Response({"status":"failed","message":"Group not found"},status=status.HTTP_404_NOT_FOUND)
     except Exception as e:

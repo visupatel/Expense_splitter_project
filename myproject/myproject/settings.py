@@ -26,7 +26,15 @@ SECRET_KEY = config('SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+
+# Django accepts requests only from these trusted hosts.
+ALLOWED_HOSTS = [
+    "127.0.0.1",
+    "localhost",
+    ".ngrok-free.dev"
+    ]
+
+NGROK_URL = "https://absolute-finisher-vocalize.ngrok-free.dev"
 
 
 # Application definition
@@ -159,6 +167,5 @@ EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD')
 
 import os
 
-MEDIA_ROOT = os.path.join(r"C:\Users\01\OneDrive\Documents", 'user_mediafiles')
-
+MEDIA_ROOT =  BASE_DIR / 'user_mediafiles'
 MEDIA_URL = '/media/'

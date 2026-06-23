@@ -1,10 +1,10 @@
 from rest_framework.decorators import api_view,permission_classes
 from rest_framework import status
 from rest_framework.response import Response
-from .models import Group,User
+from .models import Group, Invitation,User
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from django.core.mail import send_mail
-from .validation import isValid_type
+from .validation import isValid_email, isValid_type
 from django.conf import settings
 from .email_format import invitation_email,registration_email,welcome_email
 from django.utils.html import strip_tags
@@ -40,9 +40,16 @@ def send_invitation_link(request):
         subject = f"Invited to join the '{group.name}' group"
     
         for email in emails:
+            email = isValid_email(email)
 
-            # create url for invitation
-            invitation_link = request.build_absolute_uri(f'/api/invitation_link/{group.id}/{email}/')
+            # If this user has unused token then first delete it
+            Invitation.objects.filter(group=group, email=email, is_used=False).delete()
+
+            # generate token for group and email
+            invitation = Invitation.objects.create(group=group,email=email)
+
+            # create url for invitation 
+            invitation_link =  f"{settings.NGROK_URL}/api/invitation_link/{invitation.token}/"
             html_message = invitation_email(group, group.admin.username, invitation_link)
             
             # Remove all html tags and return plain text.
@@ -56,8 +63,7 @@ def send_invitation_link(request):
                 html_message=html_message,
                 fail_silently=False        # fail_silently is used to prevent email to fail silently
             )
-
-            
+               
         return Response({
             "status":"success",
             "message":"Send invitation mail successfully...",
@@ -93,11 +99,33 @@ def send_invitation_link(request):
 
 @api_view(['POST','GET'])
 @permission_classes([AllowAny])
-def join_group(request,group_id,email):
+def join_group(request,token):
 
     try:
-        group = Group.objects.get(id = group_id)
-        user_exist = group.members.filter(email=email).exists()
+        invitation = Invitation.objects.get(token=token)
+        
+        # to check invitation link is already used or not
+        if invitation.is_used:
+            return Response({
+                "status": "failed", 
+                "message": "This invitation link has already been used."
+                }, 
+                status=status.HTTP_400_BAD_REQUEST
+                )
+        
+        # to check token is expired
+        if invitation.is_expired():
+            return Response({
+                "status": "failed", 
+                "message": "This invitation link has expired."
+                }, 
+                status=status.HTTP_400_BAD_REQUEST
+                )
+        
+        group = invitation.group
+        email = invitation.email
+
+        user_exist = group.members.filter(email = email).exists()
 
         # if user is already member of the group
         if user_exist:
@@ -111,6 +139,10 @@ def join_group(request,group_id,email):
         # if user is already rgistered in the app then add directly
         user = User.objects.get(email=email)
         group.members.add(user)
+
+        # token used 
+        invitation.is_used = True
+        invitation.save()
         
         html_message = welcome_email(user,group)
         message = strip_tags(html_message)
@@ -169,9 +201,3 @@ def join_group(request,group_id,email):
         },
         status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
-
-
-
-
-
-

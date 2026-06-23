@@ -37,5 +37,3 @@ class CustomJWTAuthentication(JWTAuthentication):
             )
 
         return (user,validated_token)
-    
-
